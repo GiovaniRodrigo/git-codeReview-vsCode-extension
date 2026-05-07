@@ -1,0 +1,77 @@
+{
+  "name": "code-review-extension",
+  "displayName": "Code Review Extension",
+  "description": "Navigate local Git branches, tags, commits, changed files, and diffs from VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:codeReviewExplorer",
+    "onCommand:codeReview.refresh",
+    "onCommand:codeReview.openCommitDetails",
+    "onCommand:codeReview.openFileDiff"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "views": {
+      "scm": [
+        {
+          "id": "codeReviewExplorer",
+          "name": "Git Review"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codeReview.refresh",
+        "title": "Code Review: Refresh"
+      },
+      {
+        "command": "codeReview.openCommitDetails",
+        "title": "Code Review: Open Commit Details"
+      },
+      {
+        "command": "codeReview.openFileDiff",
+        "title": "Code Review: Open File Diff"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codeReview.refresh",
+          "when": "view == codeReviewExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codeReview.openCommitDetails",
+          "when": "view == codeReviewExplorer && viewItem == commit",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.openFileDiff",
+          "when": "view == codeReviewExplorer && viewItem == file",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.8",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2"
+  }
+}
