@@ -152,11 +152,11 @@ Permitir review direto pela extensão.
 - [x] Solicitar mudanças
 - [x] Adicionar review geral
 
-## GitLab Review (Pendente)
+## GitLab Review
 
-- [ ] Aprovar Merge Request no GitLab
-- [ ] Solicitar alterações (reprovar) no GitLab
-- [ ] Comentários por arquivo/linha no GitLab
+- [x] Aprovar Merge Request no GitLab
+- [x] Solicitar alterações (reprovar) no GitLab
+- [x] Comentários por arquivo/linha no GitLab
 
 ## Resultado esperado
 

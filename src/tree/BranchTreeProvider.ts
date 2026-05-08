@@ -124,12 +124,15 @@ export class BranchTreeProvider implements vscode.TreeDataProvider<CodeReviewTre
 
     if (group.kind === "review") {
       if (this.activeProviders.length === 0) {
-        return [new MessageNode("No remote providers (GitHub/GitLab) detected or authenticated")];
+        const message = this.rootPath ? "No remote providers (GitHub/GitLab) detected in remotes." : "No repository open.";
+        return [new MessageNode(message)];
       }
 
-      return this.reviews.length > 0
-        ? this.reviews.map((review) => new ReviewNode(this.rootPath!, review))
-        : [new MessageNode("No pull/merge requests found")];
+      if (this.reviews.length === 0) {
+        return [new MessageNode("No open pull/merge requests found. Try signing in or refreshing.")];
+      }
+
+      return this.reviews.map((review) => new ReviewNode(this.rootPath!, review));
     }
 
     const branches = group.kind === "local"

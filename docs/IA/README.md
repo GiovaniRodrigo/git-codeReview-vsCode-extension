@@ -14,6 +14,7 @@ Criar uma extensao do VS Code que ajude desenvolvedores a revisar codigo sem sai
 - `AI_DEVELOPMENT_PRINCIPLES.md`: principios de uso responsavel de IA no projeto.
 - `RAG_IMPLEMENTATION.md`: ordem de recuperacao de contexto para agentes.
 - `PROGRAMMING_PARADIGMS.md`: detalhamento de padrões de projeto e paradigmas aplicados.
+- `DESIGN_SYSTEM.md`: princípios visuais, cores e componentes da UI.
 - `GEMINI.md`: instrucoes operacionais para agentes compatíveis com Gemini CLI.
 - `USAGE.md`: guia pratico de uso desta pasta durante o desenvolvimento.
 
