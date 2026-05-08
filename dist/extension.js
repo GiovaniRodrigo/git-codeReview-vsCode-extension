@@ -36,6 +36,114 @@ __export(extension_exports, {
 module.exports = __toCommonJS(extension_exports);
 var vscode2 = __toESM(require("vscode"));
 
+// src/domain/architectureRules.ts
+function analyzeArchitectureRules(files) {
+  const findings = files.flatMap((file) => [
+    ...solidRules(file),
+    ...cleanArchitectureRules(file),
+    ...dddRules(file)
+  ]);
+  return [...findings, ...detectCircularDependencies(files)];
+}
+function solidRules(file) {
+  const findings = [];
+  const methodCount = countMatches(file.content, /\n\s*(?:public\s+|private\s+|protected\s+)?(?:async\s+)?[a-zA-Z_]\w+\s*\(/g);
+  const imports = extractImports(file.content);
+  if (methodCount > 12) {
+    findings.push(finding(file, "SRP", "SOLID", "HIGH", "Arquivo concentra muitas responsabilidades pelo volume de metodos.", 1));
+  }
+  if (countMatches(file.content, /\b(case|if)\s*\([^)]*(type|kind|status|role)[^)]*\)/g) > 4) {
+    findings.push(finding(file, "OCP", "SOLID", "MEDIUM", "Fluxo condicional por tipo/status sugere extensao por modificacao.", lineOf(file.content, /\b(case|if)\s*\(/)));
+  }
+  if (/\bextends\b/.test(file.content) && /throw new Error\(['"`](not implemented|unsupported|nao suportado)/i.test(file.content)) {
+    findings.push(finding(file, "LSP", "SOLID", "HIGH", "Subclasse parece invalidar comportamento esperado com erro de nao suporte.", lineOf(file.content, /throw new Error/i)));
+  }
+  if (/interface\s+\w+[\s\S]*?{[\s\S]*?}/.test(file.content) && methodCount > 8) {
+    findings.push(finding(file, "ISP", "SOLID", "MEDIUM", "Interface grande pode obrigar consumidores a depender de metodos desnecessarios.", lineOf(file.content, /interface\s+\w+/)));
+  }
+  if (/src\/(domain|application)\//.test(normalizePath(file.path)) && imports.some((item) => /infrastructure|presentation|vscode|react/.test(item))) {
+    findings.push(finding(file, "DIP", "SOLID", "CRITICAL", "Camada de dominio/aplicacao depende de detalhe externo ou framework.", lineOf(file.content, /import\s+/)));
+  }
+  return findings;
+}
+function cleanArchitectureRules(file) {
+  const findings = [];
+  const path2 = normalizePath(file.path);
+  const imports = extractImports(file.content);
+  if (/src\/domain\//.test(path2) && imports.some((item) => /application|infrastructure|presentation|telemetry|vscode|react/.test(item))) {
+    findings.push(finding(file, "Depend\xEAncia incorreta", "Clean Architecture", "CRITICAL", "Dominio deve permanecer independente das demais camadas.", lineOf(file.content, /import\s+/)));
+  }
+  if (/src\/application\//.test(path2) && imports.some((item) => /infrastructure|presentation|vscode|react/.test(item))) {
+    findings.push(finding(file, "Viola\xE7\xE3o de camadas", "Clean Architecture", "HIGH", "Aplicacao deve orquestrar contratos sem depender de infraestrutura ou UI.", lineOf(file.content, /import\s+/)));
+  }
+  if (imports.length > 12) {
+    findings.push(finding(file, "Acoplamento excessivo", "Clean Architecture", "MEDIUM", "Arquivo possui muitas dependencias diretas.", 1));
+  }
+  return findings;
+}
+function dddRules(file) {
+  const findings = [];
+  const path2 = normalizePath(file.path);
+  if (/src\/domain\//.test(path2) && /(user|order|payment|review|validation).*(user|order|payment|review|validation)/i.test(file.content)) {
+    findings.push(finding(file, "Bounded Context", "DDD", "MEDIUM", "Arquivo de dominio mistura termos de contextos distintos.", 1));
+  }
+  if (/(class|interface)\s+\w*Entity\b/.test(file.content) && !/\bid\b/.test(file.content)) {
+    findings.push(finding(file, "Entidades", "DDD", "HIGH", "Entidade deve possuir identidade explicita.", lineOf(file.content, /(class|interface)\s+\w*Entity\b/)));
+  }
+  if (/(class|interface)\s+\w*ValueObject\b/.test(file.content) && /\b(set|update|mutate)\w*\s*\(/.test(file.content)) {
+    findings.push(finding(file, "Value Objects", "DDD", "MEDIUM", "Value Object deve preservar imutabilidade sem mutadores.", lineOf(file.content, /\b(set|update|mutate)\w*\s*\(/)));
+  }
+  if (/src\/domain\/.*service/i.test(path2) && /(vscode|fetch\(|axios|infrastructure)/.test(file.content)) {
+    findings.push(finding(file, "Servi\xE7os de dom\xEDnio", "DDD", "HIGH", "Servico de dominio nao deve coordenar infraestrutura ou I/O externo.", lineOf(file.content, /(vscode|fetch\(|axios|infrastructure)/)));
+  }
+  return findings;
+}
+function detectCircularDependencies(files) {
+  const byPath = new Map(files.map((file) => [normalizePath(file.path), file]));
+  const findings = [];
+  files.forEach((file) => {
+    const filePath = normalizePath(file.path);
+    const imports = extractImports(file.content).map((item) => resolveImportPath(filePath, item));
+    imports.forEach((importPath) => {
+      const imported = byPath.get(importPath);
+      if (!imported) return;
+      const reverseImports = extractImports(imported.content).map((item) => resolveImportPath(importPath, item));
+      if (reverseImports.includes(filePath) && filePath < importPath) {
+        findings.push(finding(file, "Depend\xEAncia circular", "Clean Architecture", "HIGH", `Dependencia circular entre ${filePath} e ${importPath}.`, lineOf(file.content, /import\s+/)));
+      }
+    });
+  });
+  return findings;
+}
+function finding(file, rule, category, severity, description, line) {
+  return { rule, category, severity, description, file: file.path, line };
+}
+function extractImports(content) {
+  return Array.from(content.matchAll(/import\s+(?:[^'"`]+from\s+)?['"`]([^'"`]+)['"`]/g)).map((match) => match[1]);
+}
+function resolveImportPath(fromPath, importPath) {
+  if (!importPath.startsWith(".")) return importPath;
+  const parts = fromPath.split("/");
+  parts.pop();
+  importPath.split("/").forEach((part) => {
+    if (part === "..") parts.pop();
+    else if (part !== ".") parts.push(part);
+  });
+  const resolved = parts.join("/");
+  return /\.(ts|tsx|js|jsx)$/.test(resolved) ? resolved : `${resolved}.ts`;
+}
+function normalizePath(path2) {
+  return path2.replaceAll("\\", "/");
+}
+function countMatches(content, pattern) {
+  return Array.from(content.matchAll(pattern)).length;
+}
+function lineOf(content, pattern) {
+  const match = pattern.exec(content);
+  if (!match?.index) return 1;
+  return content.slice(0, match.index).split(/\r?\n/).length;
+}
+
 // src/domain/reviewSession.ts
 var REVIEW_SESSION_STATUSES = [
   "OPEN",
@@ -100,7 +208,7 @@ function createValidationFinding(session, input) {
   const findings = session.findings ?? [];
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const id = input.id ?? `${session.id}-finding-${findings.length + 1}`;
-  const finding = {
+  const finding2 = {
     id,
     rule: input.rule.trim(),
     severity: input.severity,
@@ -119,13 +227,13 @@ function createValidationFinding(session, input) {
   };
   return {
     ...session,
-    findings: [...findings, finding],
+    findings: [...findings, finding2],
     updatedAt: createdAt,
-    history: appendHistory(session, "FINDING_CREATED", `Validacao criada: ${finding.rule} em ${finding.file}:${finding.line}`, createdAt)
+    history: appendHistory(session, "FINDING_CREATED", `Validacao criada: ${finding2.rule} em ${finding2.file}:${finding2.line}`, createdAt)
   };
 }
 function updateValidationFindingStatus(session, findingId, status, reason = "", now = /* @__PURE__ */ new Date()) {
-  const { finding, findings } = findFinding(session, findingId);
+  const { finding: finding2, findings } = findFinding(session, findingId);
   const updatedAt = now.toISOString();
   return {
     ...session,
@@ -136,17 +244,17 @@ function updateValidationFindingStatus(session, findingId, status, reason = "", 
       statusHistory: [...item.statusHistory, { status, changedAt: updatedAt, reason: reason || void 0 }]
     } : item),
     updatedAt,
-    history: appendHistory(session, "FINDING_STATUS_CHANGED", `Status da validacao ${finding.rule} alterado para ${status}`, updatedAt)
+    history: appendHistory(session, "FINDING_STATUS_CHANGED", `Status da validacao ${finding2.rule} alterado para ${status}`, updatedAt)
   };
 }
 function registerCorrectionAttempt(session, findingId, input) {
   if (!input.author.trim()) throw new Error("O autor da correcao e obrigatorio.");
   if (!input.commit.trim()) throw new Error("O commit da correcao e obrigatorio.");
   if (!input.description.trim()) throw new Error("A descricao da correcao e obrigatoria.");
-  const { finding, findings } = findFinding(session, findingId);
+  const { finding: finding2, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const attempt = {
-    id: input.id ?? `${findingId}-correction-${finding.correctionAttempts.length + 1}`,
+    id: input.id ?? `${findingId}-correction-${finding2.correctionAttempts.length + 1}`,
     author: input.author.trim(),
     commit: input.commit.trim(),
     description: input.description.trim(),
@@ -162,16 +270,16 @@ function registerCorrectionAttempt(session, findingId, input) {
       statusHistory: [...item.statusHistory, { status: "FIXED", changedAt: createdAt, reason: "Correcao registrada" }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, "CORRECTION_REGISTERED", `Correcao registrada para ${finding.rule}`, createdAt)
+    history: appendHistory(session, "CORRECTION_REGISTERED", `Correcao registrada para ${finding2.rule}`, createdAt)
   };
 }
 function revalidateFinding(session, findingId, input) {
   if (!input.reviewer.trim()) throw new Error("O reviewer da revalidacao e obrigatorio.");
   if (!input.notes.trim()) throw new Error("As notas da revalidacao sao obrigatorias.");
-  const { finding, findings } = findFinding(session, findingId);
+  const { finding: finding2, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const revalidation = {
-    id: input.id ?? `${findingId}-revalidation-${finding.revalidations.length + 1}`,
+    id: input.id ?? `${findingId}-revalidation-${finding2.revalidations.length + 1}`,
     reviewer: input.reviewer.trim(),
     result: input.result,
     notes: input.notes.trim(),
@@ -187,7 +295,7 @@ function revalidateFinding(session, findingId, input) {
       statusHistory: [...item.statusHistory, { status: input.result, changedAt: createdAt, reason: "Revalidacao" }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, "FINDING_REVALIDATED", `Validacao revalidada: ${finding.rule} -> ${input.result}`, createdAt)
+    history: appendHistory(session, "FINDING_REVALIDATED", `Validacao revalidada: ${finding2.rule} -> ${input.result}`, createdAt)
   };
 }
 function addReviewComment(session, input) {
@@ -305,11 +413,11 @@ function validateFindingInput(input) {
 }
 function findFinding(session, findingId) {
   const findings = session.findings ?? [];
-  const finding = findings.find((item) => item.id === findingId);
-  if (!finding) {
+  const finding2 = findings.find((item) => item.id === findingId);
+  if (!finding2) {
     throw new Error(`Validacao nao encontrada: ${findingId}`);
   }
-  return { finding, findings };
+  return { finding: finding2, findings };
 }
 function appendHistory(session, type, message, createdAt) {
   return [
@@ -368,11 +476,11 @@ function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Da
 function calculateReviewMetrics(sessions) {
   const findings = sessions.flatMap((session) => session.findings ?? []);
   const findingsCount = findings.length;
-  const criticalCount = findings.filter((finding) => finding.severity === "CRITICAL").length;
-  const highCount = findings.filter((finding) => finding.severity === "HIGH").length;
-  const reopenedCount = findings.filter((finding) => finding.statusHistory.some((entry) => entry.status === "REOPENED")).length;
-  const correctionsCount = findings.reduce((total, finding) => total + finding.correctionAttempts.length, 0);
-  const approvalsCount = findings.filter((finding) => finding.status === "APPROVED").length;
+  const criticalCount = findings.filter((finding2) => finding2.severity === "CRITICAL").length;
+  const highCount = findings.filter((finding2) => finding2.severity === "HIGH").length;
+  const reopenedCount = findings.filter((finding2) => finding2.statusHistory.some((entry) => entry.status === "REOPENED")).length;
+  const correctionsCount = findings.reduce((total, finding2) => total + finding2.correctionAttempts.length, 0);
+  const approvalsCount = findings.filter((finding2) => finding2.status === "APPROVED").length;
   const recurrenceRate = findingsCount ? round(countRecurringRules(findings) / findingsCount * 100) : 0;
   const averageCorrectionHours = averageCorrectionTime(findings);
   const eventsCount = sessions.reduce((total, session) => total + session.history.length, 0);
@@ -387,30 +495,30 @@ function calculateReviewMetrics(sessions) {
     approvalsCount,
     correctionsCount,
     eventsCount,
-    ruleFrequency: frequency(findings.map((finding) => finding.rule)),
+    ruleFrequency: frequency(findings.map((finding2) => finding2.rule)),
     reviewerCount: frequency(sessions.map((session) => session.reviewer)),
-    developerCount: frequency(findings.map((finding) => finding.responsible)),
+    developerCount: frequency(findings.map((finding2) => finding2.responsible)),
     timeline: buildTimeline(findings)
   };
 }
 function calculateQualityScore(findings) {
-  const penalty = findings.reduce((total, finding) => {
-    const severityPenalty = finding.severity === "CRITICAL" ? 22 : finding.severity === "HIGH" ? 14 : finding.severity === "MEDIUM" ? 7 : 3;
-    const statusRelief = finding.status === "APPROVED" ? 0.2 : finding.status === "FIXED" ? 0.5 : 1;
-    const reopenPenalty = finding.statusHistory.filter((entry) => entry.status === "REOPENED").length * 5;
+  const penalty = findings.reduce((total, finding2) => {
+    const severityPenalty = finding2.severity === "CRITICAL" ? 22 : finding2.severity === "HIGH" ? 14 : finding2.severity === "MEDIUM" ? 7 : 3;
+    const statusRelief = finding2.status === "APPROVED" ? 0.2 : finding2.status === "FIXED" ? 0.5 : 1;
+    const reopenPenalty = finding2.statusHistory.filter((entry) => entry.status === "REOPENED").length * 5;
     return total + severityPenalty * statusRelief + reopenPenalty;
   }, 0);
   return Math.max(0, Math.min(100, Math.round(100 - penalty)));
 }
 function countRecurringRules(findings) {
   const counts = /* @__PURE__ */ new Map();
-  findings.forEach((finding) => counts.set(finding.rule, (counts.get(finding.rule) ?? 0) + 1));
-  return findings.filter((finding) => (counts.get(finding.rule) ?? 0) > 1).length;
+  findings.forEach((finding2) => counts.set(finding2.rule, (counts.get(finding2.rule) ?? 0) + 1));
+  return findings.filter((finding2) => (counts.get(finding2.rule) ?? 0) > 1).length;
 }
 function averageCorrectionTime(findings) {
-  const durations = findings.flatMap((finding) => {
-    const createdAt = Date.parse(finding.createdAt);
-    return finding.correctionAttempts.map((attempt) => Date.parse(attempt.createdAt) - createdAt).filter((duration) => Number.isFinite(duration) && duration >= 0);
+  const durations = findings.flatMap((finding2) => {
+    const createdAt = Date.parse(finding2.createdAt);
+    return finding2.correctionAttempts.map((attempt) => Date.parse(attempt.createdAt) - createdAt).filter((duration) => Number.isFinite(duration) && duration >= 0);
   });
   if (!durations.length) return 0;
   const averageMs = durations.reduce((total, duration) => total + duration, 0) / durations.length;
@@ -423,14 +531,14 @@ function frequency(values) {
 }
 function buildTimeline(findings) {
   const byDate = /* @__PURE__ */ new Map();
-  findings.forEach((finding) => {
-    const createdDate = toDateKey(finding.createdAt);
+  findings.forEach((finding2) => {
+    const createdDate = toDateKey(finding2.createdAt);
     const createdBucket = getTimelineBucket(byDate, createdDate);
     createdBucket.findings += 1;
-    finding.correctionAttempts.forEach((attempt) => {
+    finding2.correctionAttempts.forEach((attempt) => {
       getTimelineBucket(byDate, toDateKey(attempt.createdAt)).corrections += 1;
     });
-    finding.revalidations.forEach((revalidation) => {
+    finding2.revalidations.forEach((revalidation) => {
       const bucket = getTimelineBucket(byDate, toDateKey(revalidation.createdAt));
       if (revalidation.result === "APPROVED") bucket.approvals += 1;
       if (revalidation.result === "REOPENED") bucket.reopenings += 1;
@@ -454,9 +562,10 @@ function round(value) {
 
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
-  constructor(repository, gitService) {
+  constructor(repository, gitService, sourceFileProvider) {
     this.repository = repository;
     this.gitService = gitService;
+    this.sourceFileProvider = sourceFileProvider;
   }
   async getDashboardState() {
     const [currentSession, git2, sessions] = await Promise.all([
@@ -531,6 +640,23 @@ var ReviewSessionService = class {
     const updated = revalidateFinding(session, findingId, input);
     await this.repository.saveCurrent(updated);
     return updated;
+  }
+  async runArchitectureValidation(id) {
+    const session = await this.getExistingSession(id);
+    const sourceFiles = await this.sourceFileProvider?.readFiles(session.changedFiles) ?? [];
+    const findings = analyzeArchitectureRules(sourceFiles);
+    const commit = session.commits[0]?.split(" ")[0] ?? "HEAD";
+    const updated = findings.reduce((current, ruleFinding) => createValidationFinding(current, {
+      rule: ruleFinding.rule,
+      severity: ruleFinding.severity,
+      description: `${ruleFinding.category}: ${ruleFinding.description}`,
+      file: ruleFinding.file,
+      line: ruleFinding.line,
+      commit,
+      responsible: current.author
+    }), session);
+    await this.repository.saveCurrent(updated);
+    return { session: updated, findings };
   }
   async getExistingSession(id) {
     const session = await this.repository.getById(id);
@@ -623,6 +749,31 @@ var VscodeReviewSessionRepository = class {
     const nextSessions = [session, ...sessions.filter((item) => item.id !== session.id)];
     await this.context.workspaceState.update(CURRENT_SESSION_KEY, session);
     await this.context.workspaceState.update(SESSIONS_KEY, nextSessions);
+  }
+};
+
+// src/infrastructure/workspaceSourceFileProvider.ts
+var import_node_fs = require("node:fs");
+var path = __toESM(require("node:path"));
+var SUPPORTED_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx"]);
+var WorkspaceSourceFileProvider = class {
+  constructor(workspaceFolder) {
+    this.workspaceFolder = workspaceFolder;
+  }
+  async readFiles(paths) {
+    if (!this.workspaceFolder) return [];
+    const limitedPaths = paths.filter((filePath) => SUPPORTED_EXTENSIONS.has(path.extname(filePath))).slice(0, 80);
+    const files = await Promise.all(limitedPaths.map((filePath) => this.readFile(filePath)));
+    return files.filter((file) => Boolean(file));
+  }
+  async readFile(filePath) {
+    try {
+      const absolutePath = path.join(this.workspaceFolder.uri.fsPath, filePath);
+      const content = await import_node_fs.promises.readFile(absolutePath, "utf8");
+      return { path: filePath, content };
+    } catch {
+      return void 0;
+    }
   }
 };
 
@@ -737,6 +888,11 @@ var ReviewPanel = class {
       });
       await this.postState();
     }
+    if (message.type === "runArchitectureValidation" && typeof message.payload?.id === "string") {
+      const result = await this.service.runArchitectureValidation(message.payload.id);
+      this.post({ type: "architectureValidationCompleted", payload: { count: result.findings.length } });
+      await this.postState();
+    }
   }
   async postState() {
     const state = await this.service.getDashboardState();
@@ -818,7 +974,8 @@ function activate(context) {
   const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
   const repository = new VscodeReviewSessionRepository(context);
   const gitService = new GitCliService(workspaceFolder);
-  const reviewSessionService = new ReviewSessionService(repository, gitService);
+  const sourceFileProvider = new WorkspaceSourceFileProvider(workspaceFolder);
+  const reviewSessionService = new ReviewSessionService(repository, gitService, sourceFileProvider);
   const reviewPanel = new ReviewPanel(context, reviewSessionService);
   context.subscriptions.push(
     vscode2.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),

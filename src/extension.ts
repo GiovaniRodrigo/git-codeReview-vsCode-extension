@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ReviewSessionService } from './application/reviewSessionService';
 import { GitCliService } from './infrastructure/gitCliService';
 import { VscodeReviewSessionRepository } from './infrastructure/vscodeReviewSessionRepository';
+import { WorkspaceSourceFileProvider } from './infrastructure/workspaceSourceFileProvider';
 import { ReviewPanel } from './presentation/reviewPanel';
 import { ReviewSidebarProvider } from './presentation/reviewSidebarProvider';
 
@@ -9,7 +10,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   const repository = new VscodeReviewSessionRepository(context);
   const gitService = new GitCliService(workspaceFolder);
-  const reviewSessionService = new ReviewSessionService(repository, gitService);
+  const sourceFileProvider = new WorkspaceSourceFileProvider(workspaceFolder);
+  const reviewSessionService = new ReviewSessionService(repository, gitService, sourceFileProvider);
   const reviewPanel = new ReviewPanel(context, reviewSessionService);
 
   context.subscriptions.push(

@@ -109,6 +109,25 @@ test('manages validation findings correction and revalidation through the applic
   assert.equal(approved.findings[0].correctionAttempts.length, 1);
 });
 
+test('runs architecture validation and stores findings in the session', async () => {
+  const repository = new MemoryReviewSessionRepository();
+  const service = new ReviewSessionService(repository, new StaticGitService({
+    ...git,
+    changedFiles: ['src/application/userService.ts']
+  }), new StaticSourceFileProvider([
+    {
+      path: 'src/application/userService.ts',
+      content: "import { SqlRepo } from '../infrastructure/sqlRepo'; export class UserService {}"
+    }
+  ]));
+  const session = await service.startReview('Developer', 'Reviewer');
+
+  const result = await service.runArchitectureValidation(session.id);
+
+  assert.ok(result.findings.some((finding) => finding.rule === 'DIP'));
+  assert.ok(result.session.findings.some((finding) => finding.rule === 'DIP'));
+});
+
 class StaticGitService {
   constructor(context) {
     this.context = context;
@@ -140,5 +159,15 @@ class MemoryReviewSessionRepository {
   async saveCurrent(session) {
     this.current = session;
     this.sessions = [session, ...this.sessions.filter((item) => item.id !== session.id)];
+  }
+}
+
+class StaticSourceFileProvider {
+  constructor(files) {
+    this.files = files;
+  }
+
+  async readFiles() {
+    return this.files;
   }
 }

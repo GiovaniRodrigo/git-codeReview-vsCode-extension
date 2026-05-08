@@ -1,4 +1,9 @@
 import {
+  analyzeArchitectureRules,
+  SourceFile,
+  ArchitectureRuleFinding
+} from '../domain/architectureRules';
+import {
   addReviewComment,
   createReviewSession,
   createValidationFinding,
@@ -29,10 +34,15 @@ export interface GitService {
   getContext(): Promise<GitContext>;
 }
 
+export interface SourceFileProvider {
+  readFiles(paths: string[]): Promise<SourceFile[]>;
+}
+
 export class ReviewSessionService {
   constructor(
     private readonly repository: ReviewSessionRepository,
-    private readonly gitService: GitService
+    private readonly gitService: GitService,
+    private readonly sourceFileProvider?: SourceFileProvider
   ) {}
 
   async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[]; metrics: ReviewMetrics }> {
@@ -153,6 +163,26 @@ export class ReviewSessionService {
     const updated = revalidateFinding(session, findingId, input);
     await this.repository.saveCurrent(updated);
     return updated;
+  }
+
+  async runArchitectureValidation(id: string): Promise<{ session: ReviewSession; findings: ArchitectureRuleFinding[] }> {
+    const session = await this.getExistingSession(id);
+    const sourceFiles = await this.sourceFileProvider?.readFiles(session.changedFiles) ?? [];
+    const findings = analyzeArchitectureRules(sourceFiles);
+    const commit = session.commits[0]?.split(' ')[0] ?? 'HEAD';
+
+    const updated = findings.reduce((current, ruleFinding) => createValidationFinding(current, {
+      rule: ruleFinding.rule,
+      severity: ruleFinding.severity,
+      description: `${ruleFinding.category}: ${ruleFinding.description}`,
+      file: ruleFinding.file,
+      line: ruleFinding.line,
+      commit,
+      responsible: current.author
+    }), session);
+
+    await this.repository.saveCurrent(updated);
+    return { session: updated, findings };
   }
 
   private async getExistingSession(id: string): Promise<ReviewSession> {

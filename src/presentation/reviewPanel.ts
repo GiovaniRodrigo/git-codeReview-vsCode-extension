@@ -188,6 +188,12 @@ export class ReviewPanel {
       });
       await this.postState();
     }
+
+    if (message.type === 'runArchitectureValidation' && typeof message.payload?.id === 'string') {
+      const result = await this.service.runArchitectureValidation(message.payload.id);
+      this.post({ type: 'architectureValidationCompleted', payload: { count: result.findings.length } });
+      await this.postState();
+    }
   }
 
   private async postState(): Promise<void> {

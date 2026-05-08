@@ -147,6 +147,7 @@ function ReviewCenter({ view, state, onStartReview }) {
       <NavigationPanel session={state?.currentSession} git={state?.git} />
       <CommentsPanel session={state?.currentSession} />
       <ValidationFindingsPanel session={state?.currentSession} git={state?.git} />
+      <ArchitectureRulesPanel session={state?.currentSession} />
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -314,6 +315,42 @@ function ValidationFindingsPanel({ session, git }) {
         {session?.findings?.length ? session.findings.map((finding) => (
           <FindingItem key={finding.id} session={session} finding={finding} />
         )) : <p className="empty-state">Nenhuma validação registrada nesta sessão.</p>}
+      </div>
+    </section>
+  );
+}
+
+function ArchitectureRulesPanel({ session }) {
+  const rules = [
+    ['SOLID', 'SRP, OCP, LSP, ISP, DIP'],
+    ['Clean Architecture', 'Dependência incorreta, camadas, circularidade e acoplamento'],
+    ['DDD', 'Bounded Context, Entidades, Value Objects e Serviços de domínio']
+  ];
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Regras arquiteturais</h2>
+          <p className="muted">Validação automática dos arquivos alterados da sessão atual.</p>
+        </div>
+        <Tooltip label="Executar SOLID, Clean Architecture e DDD nos arquivos alterados">
+          <button
+            className="panel-action"
+            disabled={!session}
+            onClick={() => vscodeApi?.postMessage({ type: 'runArchitectureValidation', payload: { id: session.id } })}
+          >
+            <Shield size={16} /> Validar arquitetura
+          </button>
+        </Tooltip>
+      </div>
+      <div className="architecture-rules-grid">
+        {rules.map(([title, text]) => (
+          <article key={title}>
+            <strong>{title}</strong>
+            <p>{text}</p>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -752,6 +789,10 @@ function App() {
           sessions: [event.data.payload, ...(current?.sessions ?? []).filter((session) => session.id !== event.data.payload.id)]
         }));
         setSnackbar('Review session iniciada.');
+      }
+
+      if (event.data?.type === 'architectureValidationCompleted') {
+        setSnackbar(`${event.data.payload.count} validações arquiteturais encontradas.`);
       }
     };
 

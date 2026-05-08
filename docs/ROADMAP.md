@@ -234,29 +234,29 @@ Automatizar validações técnicas.
 
 ### SOLID
 
-* [ ] Verificação SRP
-* [ ] Verificação OCP
-* [ ] Verificação LSP
-* [ ] Verificação ISP
-* [ ] Verificação DIP
+* [x] Verificação SRP
+* [x] Verificação OCP
+* [x] Verificação LSP
+* [x] Verificação ISP
+* [x] Verificação DIP
 
 ---
 
 ### Clean Architecture
 
-* [ ] Dependência incorreta
-* [ ] Violação de camadas
-* [ ] Dependência circular
-* [ ] Acoplamento excessivo
+* [x] Dependência incorreta
+* [x] Violação de camadas
+* [x] Dependência circular
+* [x] Acoplamento excessivo
 
 ---
 
 ### DDD
 
-* [ ] Bounded Context
-* [ ] Entidades
-* [ ] Value Objects
-* [ ] Serviços de domínio
+* [x] Bounded Context
+* [x] Entidades
+* [x] Value Objects
+* [x] Serviços de domínio
 
 ---
 
