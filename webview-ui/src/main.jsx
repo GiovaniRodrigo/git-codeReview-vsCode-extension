@@ -1,6 +1,7 @@
 import logo from '../../media/logo_128px.png';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   BarChart3,
@@ -11,6 +12,7 @@ import {
   GitCommit,
   GitPullRequest,
   Home,
+  HelpCircle,
   Info,
   Lightbulb,
   ListChecks,
@@ -37,7 +39,7 @@ const colors = {
   blue: '#3b82f6'
 };
 
-function ReviewLeftbar({ view, setView, state }) {
+function ReviewLeftbar({ view, setView, state, onStartTour }) {
   const session = state?.currentSession;
   const git = state?.git;
   const nav = [
@@ -76,7 +78,7 @@ function ReviewLeftbar({ view, setView, state }) {
 
       <nav className="nav-list">
         {nav.map(([key, Icon, label, badge]) => (
-          <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
+          <button key={key} data-tour={key === 'dashboard' ? 'nav-dashboard' : undefined} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
             <Icon size={18} />
             <span>{label}</span>
             {badge && <b>{badge}</b>}
@@ -84,7 +86,12 @@ function ReviewLeftbar({ view, setView, state }) {
         ))}
       </nav>
 
-      <section className="rule-groups">
+      <button className="tour-start-button" data-tour="tour-help" onClick={onStartTour}>
+        <HelpCircle size={18} />
+        <span>Ver tutorial guiado</span>
+      </button>
+
+      <section className="rule-groups" data-tour="rule-groups">
         <h4>Categorias</h4>
         <RuleItem color="red" label="SOLID" count="3" />
         <RuleItem color="red" label="Clean Architecture" count="4" />
@@ -123,19 +130,19 @@ function ReviewCenter({ view, state, onStartReview }) {
           <h1>{view === 'dashboard' ? 'Dashboard de qualidade' : 'Diagnósticos encontrados'}</h1>
           <p>{state?.git ? `${state.git.currentBranch} para ${state.git.baseBranch}` : 'Resumo da revisão sem recriar Explorer, editor, tabs ou statusbar do VS Code.'}</p>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" data-tour="header-actions">
           <Tooltip label="Recarregar contexto Git e sessão">
             <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button>
           </Tooltip>
           <Tooltip label="Criar ou atualizar sessão de review">
-            <button className="primary" onClick={onStartReview}><Play size={16} /> Executar revisão</button>
+            <button className="primary" data-tour="start-review" onClick={onStartReview}><Play size={16} /> Executar revisão</button>
           </Tooltip>
         </div>
       </header>
 
       {!state && <SkeletonPanel />}
 
-      <section className="summary-grid">
+      <section className="summary-grid" data-tour="quality-summary">
         <SummaryCard title="Score" value={`${state?.metrics?.qualityScore ?? 100}/100`} label="qualidade atual" color="green" />
         <SummaryCard title="Violações" value={String(state?.metrics?.findingsCount ?? 0)} label={`${state?.metrics?.criticalCount ?? 0} críticas`} color="red" />
         <SummaryCard title="Correções" value={String(state?.metrics?.correctionsCount ?? 0)} label="tentativas registradas" color="green" />
@@ -146,7 +153,7 @@ function ReviewCenter({ view, state, onStartReview }) {
         <div className="workspace-main">
           <h2>Arquivos e achados da revisão</h2>
           <p className="muted">Use o editor real do VS Code para abrir o arquivo, diff e comentários. Esta área mostra apenas o resumo navegável.</p>
-          <FindingsTable changedFiles={state?.git?.changedFiles} />
+          <div data-tour="findings-table"><FindingsTable changedFiles={state?.git?.changedFiles} /></div>
         </div>
 
         <aside className="workspace-side">
@@ -155,13 +162,13 @@ function ReviewCenter({ view, state, onStartReview }) {
         </aside>
       </section>
 
-      <ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} />
-      <NavigationPanel session={state?.currentSession} git={state?.git} />
-      <CommentsPanel session={state?.currentSession} />
-      <ValidationFindingsPanel session={state?.currentSession} git={state?.git} />
-      <ArchitectureRulesPanel session={state?.currentSession} />
-      <IntelligencePanel intelligence={state?.intelligence} />
-      <CollaborationPanel session={state?.currentSession} />
+      <div data-tour="review-sessions"><ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} /></div>
+      <div data-tour="navigation-panel"><NavigationPanel session={state?.currentSession} git={state?.git} /></div>
+      <div data-tour="comments-panel"><CommentsPanel session={state?.currentSession} /></div>
+      <div data-tour="validation-panel"><ValidationFindingsPanel session={state?.currentSession} git={state?.git} /></div>
+      <div data-tour="architecture-panel"><ArchitectureRulesPanel session={state?.currentSession} /></div>
+      <div data-tour="intelligence-panel"><IntelligencePanel intelligence={state?.intelligence} /></div>
+      <div data-tour="collaboration-panel"><CollaborationPanel session={state?.currentSession} /></div>
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -208,16 +215,22 @@ function NavigationPanel({ session, git }) {
           <button
             key={kind}
             disabled={!session}
-            onClick={() => vscodeApi?.postMessage({
-              type: 'navigateReview',
-              payload: {
-                id: session.id,
-                kind,
-                ref,
-                file: kind === 'file' || kind === 'diff' ? ref : firstFile,
-                line: kind === 'comment' && firstComment ? firstComment.line : undefined
+            onClick={() => {
+              const targetFile = kind === 'file' || kind === 'diff' ? ref : firstFile;
+              vscodeApi?.postMessage({
+                type: 'navigateReview',
+                payload: {
+                  id: session.id,
+                  kind,
+                  ref,
+                  file: targetFile,
+                  line: kind === 'comment' && firstComment ? firstComment.line : 1
+                }
+              });
+              if (kind === 'file' || kind === 'diff' || kind === 'comment') {
+                vscodeApi?.postMessage({ type: kind === 'diff' ? 'openDiff' : 'openWorkspaceFile', payload: { file: targetFile, line: kind === 'comment' && firstComment ? firstComment.line : 1 } });
               }
-            })}
+            }}
           >
             <Icon size={18} />
             <span>{label}</span>
@@ -592,7 +605,7 @@ function Severity({ label }) {
   return <span className={`severity ${map[label]}`}>{label}</span>;
 }
 
-function InsightCard({ title, severity, text }) {
+function InsightCard({ title, severity, text, file = 'src/extension.ts', line = 1 }) {
   return (
     <article className="insight-card">
       <div>
@@ -601,7 +614,7 @@ function InsightCard({ title, severity, text }) {
       </div>
       <h3>{title}</h3>
       <p>{text}</p>
-      <button>Abrir no editor real do VS Code</button>
+      <button onClick={() => vscodeApi?.postMessage({ type: 'openWorkspaceFile', payload: { file, line } })}>Abrir no editor real do VS Code</button>
     </article>
   );
 }
@@ -669,7 +682,7 @@ function StatusControls({ session }) {
   );
 }
 
-function Rightbar({ metrics }) {
+function Rightbar({ metrics, state, onSetView, onStartReview }) {
   return (
     <aside className="rightbar">
       <header>
@@ -690,7 +703,7 @@ function Rightbar({ metrics }) {
       </section>
 
       <section>
-        <h3>Principais problemas <a>Ver todos</a></h3>
+        <h3>Principais problemas <button className="link-button" onClick={() => onSetView('analysis')}>Ver todos</button></h3>
         <Issue icon={<XCircle size={17} />} title="Inversão de Dependência" text="UserService.ts:11" label="Crítico" />
         <Issue icon={<AlertTriangle size={17} />} title="Muitas Responsabilidades" text="UserService.ts:16" label="Aviso" />
         <Issue icon={<Info size={17} />} title="Tratamento de Erro" text="UserService.ts:24" label="Erro" />
@@ -699,15 +712,15 @@ function Rightbar({ metrics }) {
       <section>
         <h3>Ações rápidas</h3>
         <div className="actions">
-          <button><Play size={18} />Executar</button>
-          <button><Wrench size={18} />Corrigir</button>
-          <button><FileDown size={18} />Relatório</button>
-          <button><MessageSquare size={18} />Comentar</button>
+          <button onClick={onStartReview}><Play size={18} />Executar</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'runArchitectureValidation', payload: { id: state?.currentSession?.id } })} disabled={!state?.currentSession}><Wrench size={18} />Corrigir</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'exportReviewReport' })}><FileDown size={18} />Relatório</button>
+          <button onClick={() => onSetView('comments')}><MessageSquare size={18} />Comentar</button>
         </div>
       </section>
 
       <section className="telemetry-card">
-        <h3>Telemetria <a>Ver dashboard</a></h3>
+        <h3>Telemetria <button className="link-button" onClick={() => onSetView('telemetry')}>Ver dashboard</button></h3>
         <div className="telemetry-chart"><div className="donut" /><span>⌁⌁⌁⌁⌁</span></div>
       </section>
     </aside>
@@ -755,7 +768,7 @@ function TelemetryCenter({ state }) {
       <header className="center-header">
         <div><span className="eyebrow">Telemetria</span><h1>Dashboards de qualidade</h1><p>Reincidências, regras mais violadas, tempo médio de correção e evolução por PR.</p></div>
       </header>
-      <section className="summary-grid">
+      <section className="summary-grid" data-tour="quality-summary">
         <SummaryCard title="Score" value={`${metrics.qualityScore ?? 100}/100`} label={qualityLabel(metrics.qualityScore ?? 100)} color="green" />
         <SummaryCard title="Findings" value={String(metrics.findingsCount ?? 0)} label={`${metrics.criticalCount ?? 0} críticos`} color="red" />
         <SummaryCard title="Tempo médio" value={`${metrics.averageCorrectionHours ?? 0}h`} label="correção" color="yellow" />
@@ -888,8 +901,8 @@ function SettingsCenter({ state }) {
           <h1>Configurações operacionais</h1>
           <p>Banco local, backup, sincronização remota, cache, lazy loading e adaptadores futuros.</p>
         </div>
-        <div className="header-actions">
-          <button onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> Banco local</button>
+        <div className="header-actions" data-tour="persistence-actions">
+          <button data-tour="export-database" onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> Banco local</button>
           <button onClick={() => vscodeApi?.postMessage({ type: 'createBackup' })}><Shield size={16} /> Backup</button>
           <button className="primary" onClick={() => vscodeApi?.postMessage({ type: 'syncRemote' })}><RefreshCw size={16} /> Sync remoto</button>
         </div>
@@ -941,11 +954,212 @@ function SimpleCenter({ title, subtitle }) {
   );
 }
 
+
+const defaultTourSteps = [
+  {
+    target: 'tour-help',
+    title: 'Tutorial guiado',
+    body: 'Este botão reabre o onboarding sempre que um novo usuário precisar aprender o fluxo principal.',
+    placement: 'right'
+  },
+  {
+    target: 'nav-dashboard',
+    title: 'Navegação principal',
+    body: 'Use o menu lateral para alternar entre dashboard, diagnósticos, comentários, telemetria, histórico e configurações.',
+    placement: 'right'
+  },
+  {
+    target: 'start-review',
+    title: 'Iniciar revisão',
+    body: 'Aqui começa a análise da branch ou PR. A extensão cria uma sessão e registra o contexto para auditoria.',
+    placement: 'bottom'
+  },
+  {
+    target: 'quality-summary',
+    title: 'Resumo de qualidade',
+    body: 'Os cards mostram score, violações, correções e reincidência para orientar a tomada de decisão.',
+    placement: 'bottom'
+  },
+  {
+    target: 'findings-table',
+    title: 'Achados da revisão',
+    body: 'Esta tabela lista arquivos, regras violadas, severidade e ação esperada para o reviewer ou desenvolvedor.',
+    placement: 'top'
+  },
+  {
+    target: 'comments-panel',
+    title: 'Comentários e decisão',
+    body: 'Registre não conformidades, aprovações, ajustes necessários e histórico de edição dos comentários.',
+    placement: 'top'
+  },
+  {
+    target: 'validation-panel',
+    title: 'Validações',
+    body: 'Crie evidências formais de aprovado, ajuste ou reprovado e acompanhe tentativas de correção.',
+    placement: 'top'
+  },
+  {
+    target: 'persistence-actions',
+    title: 'Persistência e backup',
+    body: 'Em Configurações, exporte o banco local, crie backup e sincronize com destino remoto configurado.',
+    placement: 'bottom',
+    beforeShow: 'settings'
+  }
+];
+
+function GuidedTour({ active, steps, currentIndex, onNext, onBack, onSkip, onFinish, onJumpView }) {
+  const [rect, setRect] = useState(null);
+  const step = steps[currentIndex];
+
+  useEffect(() => {
+    if (!active || !step) return undefined;
+    if (step.beforeShow) onJumpView(step.beforeShow);
+
+    let cancelled = false;
+    let rafId = 0;
+    let timerId = 0;
+
+    const measureTarget = () => {
+      const selector = `[data-tour="${window.CSS?.escape ? CSS.escape(step.target) : step.target}"]`;
+      const element = document.querySelector(selector);
+
+      if (!element) {
+        if (!cancelled) setRect(null);
+        return;
+      }
+
+      element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+      timerId = window.setTimeout(() => {
+        rafId = window.requestAnimationFrame(() => {
+          if (cancelled) return;
+          const box = element.getBoundingClientRect();
+          setRect({
+            top: Math.round(box.top),
+            left: Math.round(box.left),
+            width: Math.round(box.width),
+            height: Math.round(box.height)
+          });
+        });
+      }, 180);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onSkip();
+      if (event.key === 'Enter' && event.shiftKey) onBack();
+      else if (event.key === 'Enter') currentIndex === steps.length - 1 ? onFinish() : onNext();
+    };
+
+    measureTarget();
+    window.addEventListener('resize', measureTarget);
+    window.addEventListener('scroll', measureTarget, true);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', measureTarget);
+      window.removeEventListener('scroll', measureTarget, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [active, step, currentIndex, steps.length, onJumpView, onNext, onBack, onSkip, onFinish]);
+
+  if (!active || !step) return null;
+
+  const highlight = rect ?? { top: 120, left: 260, width: 320, height: 80 };
+  const popoverStyle = getTourPopoverStyle(highlight, step.placement);
+
+  return createPortal(
+    <div className="tour-layer" role="dialog" aria-modal="true" aria-label="Tutorial guiado">
+      <div className="tour-backdrop" onClick={onSkip} aria-hidden="true" />
+      <div
+        className="tour-highlight"
+        style={{
+          top: highlight.top - 8,
+          left: highlight.left - 8,
+          width: highlight.width + 16,
+          height: highlight.height + 16
+        }}
+      />
+      <article className={`tour-popover ${step.placement ?? 'bottom'}`} style={popoverStyle}>
+        <span className="tour-step-count">Passo {currentIndex + 1} de {steps.length}</span>
+        <h2>{step.title}</h2>
+        <p>{step.body}</p>
+        <div className="tour-progress" aria-hidden="true">
+          {steps.map((item, index) => <i key={item.target} className={index <= currentIndex ? 'active' : ''} />)}
+        </div>
+        <footer>
+          <button className="ghost" onClick={onSkip}>Pular</button>
+          <div>
+            <button className="ghost" onClick={onBack} disabled={currentIndex === 0}>Voltar</button>
+            {currentIndex === steps.length - 1
+              ? <button className="primary" onClick={onFinish}>Concluir</button>
+              : <button className="primary" onClick={onNext}>Próximo</button>}
+          </div>
+        </footer>
+      </article>
+    </div>,
+    document.body
+  );
+}
+
+function getTourPopoverStyle(rect, placement = 'bottom') {
+  const width = Math.min(380, Math.max(280, window.innerWidth - 32));
+  const height = 230;
+  const gap = 18;
+  const margin = 16;
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  const centerLeft = clamp(rect.left + rect.width / 2 - width / 2, margin, window.innerWidth - width - margin);
+
+  if (placement === 'right') {
+    const availableRight = window.innerWidth - (rect.left + rect.width) - margin;
+    const left = availableRight >= width + gap
+      ? rect.left + rect.width + gap
+      : clamp(rect.left - width - gap, margin, window.innerWidth - width - margin);
+
+    return {
+      top: clamp(rect.top + rect.height / 2 - height / 2, margin, window.innerHeight - height - margin),
+      left,
+      width
+    };
+  }
+
+  if (placement === 'top') {
+    const canPlaceTop = rect.top >= height + gap + margin;
+    return {
+      top: canPlaceTop
+        ? rect.top - height - gap
+        : clamp(rect.top + rect.height + gap, margin, window.innerHeight - height - margin),
+      left: centerLeft,
+      width
+    };
+  }
+
+  const canPlaceBottom = window.innerHeight - (rect.top + rect.height) >= height + gap + margin;
+  return {
+    top: canPlaceBottom
+      ? rect.top + rect.height + gap
+      : clamp(rect.top - height - gap, margin, window.innerHeight - height - margin),
+    left: centerLeft,
+    width
+  };
+}
+
 function App() {
   const initialView = document.body?.dataset?.initialView || 'dashboard';
   const [view, setView] = useState(initialView);
   const [state, setState] = useState();
   const [snackbar, setSnackbar] = useState('Carregando contexto da revisão...');
+  const [tourActive, setTourActive] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+
+  useEffect(() => {
+    const seenTour = window.localStorage.getItem('codeReviewOnboardingSeen');
+    if (!seenTour) {
+      window.setTimeout(() => setTourActive(true), 450);
+    }
+  }, []);
 
   useEffect(() => {
     const listener = (event) => {
@@ -970,6 +1184,10 @@ function App() {
       if (event.data?.type === 'operationCompleted') {
         setSnackbar(event.data.payload.message);
       }
+
+      if (event.data?.type === 'operationFailed') {
+        setSnackbar(`Erro: ${event.data.payload.message}`);
+      }
     };
 
     window.addEventListener('message', listener);
@@ -984,12 +1202,32 @@ function App() {
   }, [snackbar]);
 
   const startReview = useMemo(() => () => vscodeApi?.postMessage({ type: 'startReview' }), []);
+  const startTour = () => {
+    setView('dashboard');
+    setTourStep(0);
+    setTourActive(true);
+  };
+  const finishTour = () => {
+    window.localStorage.setItem('codeReviewOnboardingSeen', 'true');
+    setTourActive(false);
+    setSnackbar('Tutorial concluído. Você pode reabrir pelo menu lateral.');
+  };
 
   return (
     <div className="app-shell">
-      <ReviewLeftbar view={view} setView={setView} state={state} />
+      <ReviewLeftbar view={view} setView={setView} state={state} onStartTour={startTour} />
       <ReviewCenter view={view} state={state} onStartReview={startReview} />
-      <Rightbar metrics={state?.metrics} />
+      <Rightbar metrics={state?.metrics} state={state} onSetView={setView} onStartReview={startReview} />
+      <GuidedTour
+        active={tourActive}
+        steps={defaultTourSteps}
+        currentIndex={tourStep}
+        onNext={() => setTourStep((current) => Math.min(defaultTourSteps.length - 1, current + 1))}
+        onBack={() => setTourStep((current) => Math.max(0, current - 1))}
+        onSkip={finishTour}
+        onFinish={finishTour}
+        onJumpView={setView}
+      />
       {snackbar && <div className="snackbar" role="status">{snackbar}</div>}
     </div>
   );

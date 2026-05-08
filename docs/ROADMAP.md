@@ -465,3 +465,15 @@ VS Code Extension
 ├── Persistence Engine
 └── Git Integration
 ```
+
+## Fase 12 — Onboarding e Tutoriais Guiados
+
+- [x] Mostrar onboarding para novos usuários.
+- [x] Escurecer a tela durante o tutorial.
+- [x] Destacar botões, campos e áreas importantes.
+- [x] Exibir balão explicativo por etapa.
+- [x] Permitir navegação com Próximo, Voltar, Pular e Concluir.
+- [x] Persistir conclusão do onboarding em `localStorage`.
+- [x] Permitir reabrir o tutorial pelo menu lateral.
+- [x] Criar documentação em `docs/ONBOARDING_TOURS.md`.
+- [x] Preparar estrutura para novos tutoriais dentro da aplicação.

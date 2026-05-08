@@ -1170,7 +1170,7 @@ var ReviewPanel = class {
     this.panel.onDidDispose(() => {
       this.panel = void 0;
     });
-    this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message));
+    this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message).catch((error) => this.handleError(error)));
     this.panel.webview.html = getWebviewHtml(this.panel.webview, this.context.extensionUri, view);
     this.postState();
   }
@@ -1280,6 +1280,21 @@ var ReviewPanel = class {
       await this.service.refreshMergeDecision(message.payload.id);
       await this.postState();
     }
+    if (message.type === "openWorkspaceFile" && typeof message.payload?.file === "string") {
+      await this.openWorkspaceFile(message.payload.file, typeof message.payload.line === "number" ? message.payload.line : 1);
+      this.post({ type: "operationCompleted", payload: { message: `Arquivo aberto: ${message.payload.file}` } });
+    }
+    if (message.type === "openDiff" && typeof message.payload?.file === "string") {
+      await this.openWorkspaceFile(message.payload.file, typeof message.payload.line === "number" ? message.payload.line : 1);
+      this.post({ type: "operationCompleted", payload: { message: `Diff/arquivo aberto: ${message.payload.file}` } });
+    }
+    if (message.type === "exportReviewReport") {
+      const state = await this.service.getDashboardState();
+      const report = buildMarkdownReport(state);
+      const document = await vscode2.workspace.openTextDocument({ content: report, language: "markdown" });
+      await vscode2.window.showTextDocument(document, { preview: false });
+      this.post({ type: "operationCompleted", payload: { message: "Relat\xF3rio de revis\xE3o gerado." } });
+    }
     if (message.type === "exportLocalDatabase") {
       const data = await this.service.exportLocalDatabase();
       const document = await vscode2.workspace.openTextDocument({ content: data, language: "json" });
@@ -1295,6 +1310,24 @@ var ReviewPanel = class {
       this.post({ type: "operationCompleted", payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
     }
   }
+  async openWorkspaceFile(file, line = 1) {
+    const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("Abra um workspace para navegar at\xE9 arquivos da revis\xE3o.");
+    }
+    const normalized = file.replace(/^\/+/, "");
+    const uri = vscode2.Uri.joinPath(workspaceFolder.uri, normalized);
+    const document = await vscode2.workspace.openTextDocument(uri);
+    const editor = await vscode2.window.showTextDocument(document, { preview: false });
+    const position = new vscode2.Position(Math.max(0, line - 1), 0);
+    editor.selection = new vscode2.Selection(position, position);
+    editor.revealRange(new vscode2.Range(position, position), vscode2.TextEditorRevealType.InCenter);
+  }
+  handleError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode2.window.showErrorMessage(`Code Review: ${message}`);
+    this.post({ type: "operationFailed", payload: { message } });
+  }
   async postState() {
     const state = await this.service.getDashboardState();
     this.post({ type: "dashboardState", payload: state });
@@ -1305,6 +1338,38 @@ var ReviewPanel = class {
 };
 function isNavigationKind(value) {
   return value === "commit" || value === "diff" || value === "file" || value === "comment" || value === "validation";
+}
+function buildMarkdownReport(state) {
+  const session = state.currentSession;
+  const lines2 = [
+    "# Relat\xF3rio de Code Review",
+    "",
+    `- Branch atual: ${state.git.currentBranch}`,
+    `- Branch destino: ${state.git.baseBranch}`,
+    `- Score: ${state.metrics.qualityScore}/100`,
+    `- Findings: ${state.metrics.findingsCount}`,
+    `- Corre\xE7\xF5es: ${state.metrics.correctionsCount}`,
+    `- Reincid\xEAncia: ${state.metrics.recurrenceRate}%`,
+    "",
+    "## Sess\xE3o atual",
+    "",
+    session ? `- ID: ${session.id}` : "- Nenhuma sess\xE3o ativa.",
+    session ? `- Status: ${session.status}` : "",
+    session ? `- Arquivos alterados: ${session.changedFiles.length}` : "",
+    "",
+    "## Findings",
+    "",
+    ...session?.findings?.length ? session.findings.map((finding2) => `- [${finding2.status}] ${finding2.severity} ${finding2.rule} em ${finding2.file}:${finding2.line} \u2014 ${finding2.description}`) : ["- Nenhum finding registrado."],
+    "",
+    "## Coment\xE1rios",
+    "",
+    ...session?.comments?.length ? session.comments.map((comment) => `- ${comment.file}:${comment.line} \u2014 ${comment.body}`) : ["- Nenhum coment\xE1rio registrado."],
+    "",
+    "## Hist\xF3rico",
+    "",
+    ...session?.history?.length ? session.history.map((entry) => `- ${entry.createdAt} \u2014 ${entry.message}`) : ["- Sem hist\xF3rico."]
+  ];
+  return lines2.filter((line) => line !== "").join("\n");
 }
 function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
   const distUri = vscode2.Uri.joinPath(extensionUri, "webview-ui", "dist");

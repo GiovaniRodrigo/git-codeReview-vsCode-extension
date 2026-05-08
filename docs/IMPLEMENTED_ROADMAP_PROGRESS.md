@@ -58,3 +58,24 @@ Status: iniciado.
 - `webview-ui/src/styles.css`
 - `package.json`
 - `docs/ROADMAP.md`
+
+## Fase 12 — Onboarding e Tutoriais Guiados
+
+Status: implementado.
+
+Entregas:
+
+- Onboarding automático para primeiro acesso.
+- Botão para reabrir tutorial guiado no menu lateral.
+- Overlay escurecido com destaque do elemento ativo.
+- Balão explicativo com contador de etapa.
+- Controles de navegação: Próximo, Voltar, Pular e Concluir.
+- Persistência local de conclusão com `localStorage`.
+- Estrutura extensível por `data-tour` e `defaultTourSteps`.
+- Documentação criada em `docs/ONBOARDING_TOURS.md`.
+
+Validação:
+
+- `npm run build:webview`: aprovado.
+- `npm run build:extension`: aprovado.
+- `npm test`: 27 testes aprovados.
