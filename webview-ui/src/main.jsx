@@ -12,6 +12,7 @@ import {
   Home,
   Info,
   ListChecks,
+  Loader2,
   MessageSquare,
   MoreVertical,
   Pencil,
@@ -111,10 +112,16 @@ function ReviewCenter({ view, state, onStartReview }) {
           <p>{state?.git ? `${state.git.currentBranch} para ${state.git.baseBranch}` : 'Resumo da revisão sem recriar Explorer, editor, tabs ou statusbar do VS Code.'}</p>
         </div>
         <div className="header-actions">
-          <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button>
-          <button className="primary" onClick={onStartReview}><Play size={16} /> Executar revisão</button>
+          <Tooltip label="Recarregar contexto Git e sessão">
+            <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button>
+          </Tooltip>
+          <Tooltip label="Criar ou atualizar sessão de review">
+            <button className="primary" onClick={onStartReview}><Play size={16} /> Executar revisão</button>
+          </Tooltip>
         </div>
       </header>
+
+      {!state && <SkeletonPanel />}
 
       <section className="summary-grid">
         <SummaryCard title="Score" value="82/100" label="Muito bom" color="green" />
@@ -151,6 +158,7 @@ function ReviewCenter({ view, state, onStartReview }) {
 }
 
 function NavigationPanel({ session, git }) {
+  const [tab, setTab] = useState('changes');
   const firstFile = session?.changedFiles?.[0] ?? git?.changedFiles?.[0] ?? 'src/extension.ts';
   const firstCommit = session?.commits?.[0] ?? git?.commits?.[0] ?? 'HEAD';
   const firstComment = session?.comments?.[0];
@@ -170,6 +178,15 @@ function NavigationPanel({ session, git }) {
           <p className="muted">Atalhos da sessão para commits, diffs, arquivos, comentários e validações.</p>
         </div>
         {session?.activeNavigation && <span className="active-target">{session.activeNavigation.kind}: {session.activeNavigation.ref}</span>}
+      </div>
+      <div className="tabs" role="tablist" aria-label="Contexto de navegação">
+        {[
+          ['changes', 'Alterações'],
+          ['activity', 'Atividade'],
+          ['quality', 'Qualidade']
+        ].map(([key, label]) => (
+          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>
+        ))}
       </div>
       <div className="navigation-grid">
         {targets.map(([kind, Icon, label, ref]) => (
@@ -228,7 +245,9 @@ function CommentsPanel({ session }) {
         <input value={file} readOnly />
         <input type="number" min="1" value={line} onChange={(event) => setLine(event.target.value)} />
         <input value={draft} onChange={(event) => setDraft(event.target.value)} />
-        <button disabled={!session || !draft.trim()} onClick={addComment}><MessageSquare size={16} /> Inserir</button>
+        <Tooltip label="Adicionar comentário vinculado ao arquivo e linha">
+          <button disabled={!session || !draft.trim()} onClick={addComment}><MessageSquare size={16} /> Inserir</button>
+        </Tooltip>
       </div>
       <div className="comments-list">
         {session?.comments?.length ? session.comments.map((comment) => (
@@ -287,7 +306,9 @@ function ValidationFindingsPanel({ session, git }) {
         </select>
         <input type="number" min="1" value={line} onChange={(event) => setLine(event.target.value)} />
         <input value={description} onChange={(event) => setDescription(event.target.value)} />
-        <button disabled={!session || !description.trim()} onClick={createFinding}><ListChecks size={16} /> Criar</button>
+        <Tooltip label="Criar finding de validação">
+          <button disabled={!session || !description.trim()} onClick={createFinding}><ListChecks size={16} /> Criar</button>
+        </Tooltip>
       </div>
       <div className="findings-list">
         {session?.findings?.length ? session.findings.map((finding) => (
@@ -336,7 +357,11 @@ function FindingItem({ session, finding }) {
           payload: { id: session.id, findingId: finding.id, result: 'REOPENED', notes: 'Reaberto após nova análise.' }
         })}>Reabrir</button>
       </div>
-      <small>{finding.statusHistory.length} mudanças · {finding.correctionAttempts.length} correções · {finding.revalidations.length} revalidações</small>
+      <div className="badge-row">
+        <Badge>{finding.statusHistory.length} mudanças</Badge>
+        <Badge>{finding.correctionAttempts.length} correções</Badge>
+        <Badge>{finding.revalidations.length} revalidações</Badge>
+      </div>
     </article>
   );
 }
@@ -372,6 +397,25 @@ function SummaryCard({ title, value, label, color }) {
       <strong className={color}>{value}</strong>
       <p>{label}</p>
     </div>
+  );
+}
+
+function Badge({ children }) {
+  return <span className="badge">{children}</span>;
+}
+
+function Tooltip({ label, children }) {
+  return <span className="tooltip" data-tooltip={label}>{children}</span>;
+}
+
+function SkeletonPanel() {
+  return (
+    <section className="skeleton-panel" aria-label="Carregando dados">
+      <Loader2 size={18} />
+      <span />
+      <span />
+      <span />
+    </section>
   );
 }
 
@@ -633,11 +677,13 @@ function App() {
   const initialView = document.body?.dataset?.initialView || 'dashboard';
   const [view, setView] = useState(initialView);
   const [state, setState] = useState();
+  const [snackbar, setSnackbar] = useState('Carregando contexto da revisão...');
 
   useEffect(() => {
     const listener = (event) => {
       if (event.data?.type === 'dashboardState') {
         setState(event.data.payload);
+        setSnackbar('Contexto da revisão atualizado.');
       }
 
       if (event.data?.type === 'reviewSessionStarted') {
@@ -646,6 +692,7 @@ function App() {
           currentSession: event.data.payload,
           sessions: [event.data.payload, ...(current?.sessions ?? []).filter((session) => session.id !== event.data.payload.id)]
         }));
+        setSnackbar('Review session iniciada.');
       }
     };
 
@@ -654,6 +701,12 @@ function App() {
     return () => window.removeEventListener('message', listener);
   }, []);
 
+  useEffect(() => {
+    if (!snackbar) return undefined;
+    const timeout = window.setTimeout(() => setSnackbar(''), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [snackbar]);
+
   const startReview = useMemo(() => () => vscodeApi?.postMessage({ type: 'startReview' }), []);
 
   return (
@@ -661,6 +714,7 @@ function App() {
       <ReviewLeftbar view={view} setView={setView} state={state} />
       <ReviewCenter view={view} state={state} onStartReview={startReview} />
       <Rightbar />
+      {snackbar && <div className="snackbar" role="status">{snackbar}</div>}
     </div>
   );
 }

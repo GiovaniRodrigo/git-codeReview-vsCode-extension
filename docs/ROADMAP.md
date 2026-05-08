@@ -152,33 +152,33 @@ Melhorar experiência visual e produtividade.
 
 ### Material Design 3
 
-* [ ] Implementação M3
-* [ ] Tokens visuais
-* [ ] Tipografia
-* [ ] Sistema de cores
-* [ ] Elevação
+* [x] Implementação M3
+* [x] Tokens visuais
+* [x] Tipografia
+* [x] Sistema de cores
+* [x] Elevação
 
 ---
 
 ### Componentes
 
-* [ ] Cards
-* [ ] Chips
-* [ ] Badges
-* [ ] Tabs
-* [ ] Timeline
-* [ ] Snackbar
-* [ ] Tooltips
+* [x] Cards
+* [x] Chips
+* [x] Badges
+* [x] Tabs
+* [x] Timeline
+* [x] Snackbar
+* [x] Tooltips
 
 ---
 
 ### Experiência de Uso
 
-* [ ] Navegação reduzida
-* [ ] Feedback em tempo real
-* [ ] Loading states
-* [ ] Skeleton loading
-* [ ] Animações suaves
+* [x] Navegação reduzida
+* [x] Feedback em tempo real
+* [x] Loading states
+* [x] Skeleton loading
+* [x] Animações suaves
 
 ---
 
