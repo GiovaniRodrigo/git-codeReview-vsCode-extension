@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
   RefreshCw,
   Settings,
   Shield,
+  Sparkles,
   Wrench,
   XCircle
 } from 'lucide-react';
@@ -48,6 +50,7 @@ function ReviewLeftbar({ view, setView, state, onStartTour }) {
     ['intelligence', Lightbulb, 'Inteligência', state?.intelligence?.suggestions?.length ? String(state.intelligence.suggestions.length) : ''],
     ['comments', MessageSquare, 'Comentários', session?.comments?.length ? String(session.comments.length) : ''],
     ['collaboration', GitPullRequest, 'Colaboração', session?.notifications?.filter((item) => !item.read).length ? String(session.notifications.filter((item) => !item.read).length) : ''],
+    ['git-review', GitCommit, 'Git Review', git?.changedFiles?.length ? String(git.changedFiles.length) : ''],
     ['conformities', CheckCircle2, 'Conformidades', '68'],
     ['telemetry', BarChart3, 'Telemetria', '94%'],
     ['history', Clock3, 'Histórico', '12'],
@@ -119,6 +122,7 @@ function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'intelligence') return <IntelligenceCenter state={state} />;
   if (view === 'collaboration') return <CollaborationCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
+  if (view === 'git-review') return <GitReviewCenter state={state} />;
   if (view === 'settings') return <SettingsCenter state={state} />;
   if (view === 'conformities') return <ConformitiesCenter />;
 
@@ -142,7 +146,23 @@ function ReviewCenter({ view, state, onStartReview }) {
 
       {!state && <SkeletonPanel />}
 
-      <section className="summary-grid" data-tour="quality-summary">
+      <section className="dashboard-hero" data-tour="quality-summary">
+        <div className="hero-score-card">
+          <Ring score={state?.metrics?.qualityScore ?? 100} />
+          <div>
+            <span className="eyebrow">Score arquitetural</span>
+            <h2>{qualityLabel(state?.metrics?.qualityScore ?? 100)}</h2>
+            <p>Resumo executivo da branch/PR com foco em conformidade, violações, reincidência e evidências de correção.</p>
+          </div>
+        </div>
+        <div className="hero-status-grid">
+          <div><Sparkles size={18} /><strong>{state?.currentSession?.status ?? 'OPEN'}</strong><span>Status da revisão</span></div>
+          <div><Activity size={18} /><strong>{state?.metrics?.recurrenceRate ?? 0}%</strong><span>Reincidência</span></div>
+          <div><GitPullRequest size={18} /><strong>{state?.git?.changedFiles?.length ?? 0}</strong><span>Arquivos alterados</span></div>
+        </div>
+      </section>
+
+      <section className="summary-grid">
         <SummaryCard title="Score" value={`${state?.metrics?.qualityScore ?? 100}/100`} label="qualidade atual" color="green" />
         <SummaryCard title="Violações" value={String(state?.metrics?.findingsCount ?? 0)} label={`${state?.metrics?.criticalCount ?? 0} críticas`} color="red" />
         <SummaryCard title="Correções" value={String(state?.metrics?.correctionsCount ?? 0)} label="tentativas registradas" color="green" />
@@ -154,6 +174,7 @@ function ReviewCenter({ view, state, onStartReview }) {
           <h2>Arquivos e achados da revisão</h2>
           <p className="muted">Use o editor real do VS Code para abrir o arquivo, diff e comentários. Esta área mostra apenas o resumo navegável.</p>
           <div data-tour="findings-table"><FindingsTable changedFiles={state?.git?.changedFiles} /></div>
+          <SmartDiffPanel changedFiles={state?.git?.changedFiles} />
         </div>
 
         <aside className="workspace-side">
@@ -176,6 +197,226 @@ function ReviewCenter({ view, state, onStartReview }) {
         <InsightCard title="Tratamento de Erro" severity="Erro" text="Erro genérico usado em fluxo de domínio. Padronizar Result/Error." />
       </section>
     </main>
+  );
+}
+
+
+function GitReviewCenter({ state }) {
+  const session = state?.currentSession;
+  const git = state?.git ?? {};
+  const baseFiles = session?.changedFiles?.length ? session.changedFiles : (git.changedFiles ?? []);
+  const commits = session?.commits?.length ? session.commits : (git.commits ?? []);
+  const [commitFiles, setCommitFiles] = useState([]);
+  const files = commitFiles.length ? commitFiles : baseFiles;
+  const [selectedFile, setSelectedFile] = useState(files[0] ?? '');
+  const [selectedCommit, setSelectedCommit] = useState(commits[0]?.split(' ')[0] ?? 'HEAD');
+  const [viewer, setViewer] = useState({ file: selectedFile, commit: selectedCommit, content: '', diff: '', loading: false });
+  const [commentLine, setCommentLine] = useState(1);
+  const [commentBody, setCommentBody] = useState('Solicitar ajuste neste trecho.');
+
+  const requestFile = (file = selectedFile, commit = selectedCommit) => {
+    if (!file) {
+      setViewer({ file: '', commit, content: '// Nenhum arquivo alterado encontrado para este contexto Git.', diff: 'Sem diff disponível.', loading: false });
+      return;
+    }
+
+    setViewer((current) => ({ ...current, loading: true, file, commit }));
+    vscodeApi?.postMessage({ type: 'loadGitFile', payload: { file, commit } });
+  };
+
+  const selectCommit = (commitLine) => {
+    const hash = commitLine.split(' ')[0] || 'HEAD';
+    setSelectedCommit(hash);
+    setCommitFiles([]);
+    setViewer((current) => ({ ...current, loading: true, commit: hash }));
+    vscodeApi?.postMessage({ type: 'loadCommitFiles', payload: { commit: hash } });
+  };
+
+  useEffect(() => {
+    if (files.length && !files.includes(selectedFile)) setSelectedFile(files[0]);
+  }, [files.join('|')]);
+
+  useEffect(() => {
+    requestFile(selectedFile, selectedCommit);
+  }, [selectedFile, selectedCommit]);
+
+  useEffect(() => {
+    const listener = (event) => {
+      if (event.data?.type === 'gitFileLoaded') {
+        setViewer({ ...event.data.payload, loading: false });
+      }
+
+      if (event.data?.type === 'commitFilesLoaded') {
+        const payload = event.data.payload ?? {};
+        const loadedFiles = Array.isArray(payload.files) ? payload.files : [];
+        setCommitFiles(loadedFiles);
+        if (loadedFiles.length) {
+          setSelectedFile(loadedFiles[0]);
+          requestFile(loadedFiles[0], payload.commit || selectedCommit);
+        } else {
+          setViewer({
+            file: '',
+            commit: payload.commit || selectedCommit,
+            content: '// Nenhum arquivo encontrado nesse commit. Verifique se o hash pertence ao repositório aberto.',
+            diff: 'Sem diff disponível para este commit.',
+            loading: false
+          });
+        }
+      }
+    };
+    window.addEventListener('message', listener);
+    return () => window.removeEventListener('message', listener);
+  }, [selectedFile, selectedCommit]);
+
+  const submitComment = () => {
+    if (!session || !commentBody.trim()) return;
+    vscodeApi?.postMessage({
+      type: 'addReviewComment',
+      payload: {
+        id: session.id,
+        body: commentBody,
+        file: selectedFile,
+        line: Number(commentLine) || 1,
+        commit: selectedCommit
+      }
+    });
+    setCommentBody('');
+  };
+
+  const visibleLines = (viewer.content || '// Selecione um arquivo alterado para visualizar o conteúdo.').split('\n').slice(0, 220);
+  const visibleDiff = (viewer.diff || 'Sem diff disponível para este arquivo no contexto atual.').split('\n').slice(0, 220);
+
+  return (
+    <main className="center-panel simple git-review-center">
+      <header className="center-header">
+        <div>
+          <span className="eyebrow">Git Review</span>
+          <h1>Seguir alterações do Git</h1>
+          <p>Baseie a revisão em PR, commit ou branch, abra o arquivo alterado na tela e registre comentários vinculados à linha.</p>
+        </div>
+        <div className="header-actions">
+          <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar Git</button>
+          <button className="primary" onClick={() => vscodeApi?.postMessage({ type: 'startReview' })}><Play size={16} /> Criar sessão</button>
+        </div>
+      </header>
+
+      <section className="git-context-grid">
+        <article><GitPullRequest size={18} /><span>Origem</span><strong>{git.currentBranch ?? session?.sourceBranch ?? 'sem branch'}</strong></article>
+        <article><GitCommit size={18} /><span>Base</span><strong>{git.baseBranch ?? session?.targetBranch ?? 'main'}</strong></article>
+        <article><FolderOpen size={18} /><span>Arquivos</span><strong>{files.length}</strong></article>
+        <article><MessageSquare size={18} /><span>Comentários</span><strong>{session?.comments?.length ?? 0}</strong></article>
+      </section>
+
+      <section className="git-review-workspace">
+        <aside className="git-change-list">
+          <div className="section-title compact">
+            <div>
+              <h2>Alterações</h2>
+              <p className="muted">Arquivos vindos do diff atual.</p>
+            </div>
+          </div>
+          <div className="git-scroll-list">
+            {files.length ? files.map((file) => (
+              <button key={file} className={selectedFile === file ? 'active' : ''} onClick={() => setSelectedFile(file)}>
+                <FolderOpen size={15} />
+                <span>{file}</span>
+              </button>
+            )) : <p className="empty-state">Nenhum arquivo alterado encontrado no Git.</p>}
+          </div>
+
+          <div className="section-title compact commits-title">
+            <div>
+              <h2>Commits</h2>
+              <p className="muted">Use como referência da revisão.</p>
+            </div>
+          </div>
+          <div className="git-scroll-list commits">
+            {commits.length ? commits.slice(0, 20).map((commit) => {
+              const hash = commit.split(' ')[0];
+              return (
+                <button key={commit} className={selectedCommit === hash ? 'active' : ''} onClick={() => selectCommit(commit)}>
+                  <GitCommit size={15} />
+                  <span>{commit}</span>
+                </button>
+              );
+            }) : <p className="empty-state">Nenhum commit listado.</p>}
+          </div>
+        </aside>
+
+        <section className="git-file-viewer">
+          <div className="file-viewer-toolbar">
+            <div>
+              <span className="eyebrow">Arquivo selecionado</span>
+              <h2>{selectedFile}</h2>
+              <p className="muted">Commit/base: {selectedCommit}</p>
+            </div>
+            <div className="header-actions">
+              <button disabled={!selectedFile} onClick={() => { requestFile(selectedFile, selectedCommit); vscodeApi?.postMessage({ type: 'openWorkspaceFile', payload: { file: selectedFile, line: Number(commentLine) || 1, commit: selectedCommit } }); }}>Abrir no VS Code</button>
+              <button disabled={!selectedFile} onClick={() => { requestFile(selectedFile, selectedCommit); vscodeApi?.postMessage({ type: 'openDiff', payload: { file: selectedFile, line: Number(commentLine) || 1, commit: selectedCommit } }); }}>Abrir diff</button>
+            </div>
+          </div>
+
+          <div className="split-code-review">
+            <div className="code-pane">
+              <h3>Conteúdo do arquivo {viewer.loading ? '· carregando...' : ''}</h3>
+              <pre aria-busy={viewer.loading}>{visibleLines.map((line, index) => (
+                <button key={`${index}-${line}`} className={Number(commentLine) === index + 1 ? 'code-line active' : 'code-line'} onClick={() => setCommentLine(index + 1)}>
+                  <span>{index + 1}</span><code>{line || ' '}</code>
+                </button>
+              ))}</pre>
+            </div>
+            <div className="code-pane diff-pane">
+              <h3>Diff do Git {viewer.loading ? '· carregando...' : ''}</h3>
+              <pre>{visibleDiff.map((line, index) => <code key={`${index}-${line}`} className={line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : ''}>{line || ' '}</code>)}</pre>
+            </div>
+          </div>
+        </section>
+
+        <aside className="git-comment-panel">
+          <h2>Comentário inline</h2>
+          <p className="muted">O comentário fica vinculado ao arquivo, linha e commit selecionados.</p>
+          <label>Arquivo<input value={selectedFile} readOnly /></label>
+          <label>Linha<input type="number" min="1" value={commentLine} onChange={(event) => setCommentLine(event.target.value)} /></label>
+          <label>Commit<input value={selectedCommit} onChange={(event) => setSelectedCommit(event.target.value)} /></label>
+          <label>Comentário<textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} /></label>
+          <button className="primary full" disabled={!session || !selectedFile || !commentBody.trim()} onClick={submitComment}><MessageSquare size={16} /> Adicionar comentário</button>
+          {!session && <p className="empty-state">Crie uma sessão de review antes de comentar.</p>}
+          <div className="comments-list compact-comments">
+            {(session?.comments ?? []).filter((comment) => comment.file === selectedFile).map((comment) => (
+              <article key={comment.id} className="comment-item">
+                <header><span>{comment.file}:{comment.line}</span></header>
+                <p>{comment.body}</p>
+                <small>{comment.commit ?? 'sem commit'}</small>
+              </article>
+            ))}
+          </div>
+        </aside>
+      </section>
+    </main>
+  );
+}
+
+function SmartDiffPanel({ changedFiles = [] }) {
+  const files = changedFiles.length ? changedFiles.slice(0, 3) : ['src/Application/UserService.ts', 'src/Infrastructure/UserRepository.ts', 'src/Presentation/AuthController.ts'];
+  return (
+    <section className="smart-diff-panel" aria-label="Diff inteligente arquitetural">
+      <div className="section-title compact">
+        <div>
+          <h2>Diff inteligente</h2>
+          <p className="muted">Impacto arquitetural por camada, arquivo e regra.</p>
+        </div>
+        <Badge>Preview</Badge>
+      </div>
+      <div className="diff-map">
+        {files.map((file, index) => (
+          <article key={file} className={index === 0 ? 'hotspot' : ''}>
+            <span>{index === 0 ? 'Aplicação' : index === 1 ? 'Infraestrutura' : 'Interface'}</span>
+            <strong>{file}</strong>
+            <small>{index === 0 ? 'DIP crítico · abrir comentário inline' : index === 1 ? 'Persistência concreta isolada' : 'Endpoint sem violação crítica'}</small>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -526,7 +767,7 @@ function CommentItem({ session, comment }) {
 
 function SummaryCard({ title, value, label, color }) {
   return (
-    <div className="summary-card">
+    <div className={`summary-card accent-${color}`}>
       <span>{title}</span>
       <strong className={color}>{value}</strong>
       <p>{label}</p>
@@ -569,6 +810,7 @@ function FindingsTable({ changedFiles = [] }) {
   ];
 
   return (
+    <div className="table-shell">
     <table className="findings-table">
       <thead>
         <tr>
@@ -591,6 +833,7 @@ function FindingsTable({ changedFiles = [] }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -864,17 +1107,27 @@ function TelemetryPanel({ title, items = [], empty }) {
   );
 }
 function HistoryCenter({ state }) {
+  const sessions = state?.sessions ?? [];
   return (
     <main className="center-panel simple">
       <header className="center-header">
         <div><span className="eyebrow">Code Review</span><h1>Histórico de revisões</h1><p>Linha do tempo de reviews, correções, revalidações e decisões de aprovação.</p></div>
       </header>
-      <ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} />
-      <section className="review-workspace single">
-        <div className="workspace-main">
-          <h2>Timeline da sessão atual</h2>
-          <Timeline session={state?.currentSession} />
-        </div>
+      <section className="history-toolbar" aria-label="Filtros do histórico">
+        <button className="active">Todas</button>
+        <button>Com ajuste</button>
+        <button>Aprovadas</button>
+        <button>Reabertas</button>
+        <span>{sessions.length} sessões registradas</span>
+      </section>
+      <section className="history-layout">
+        <ReviewSessionsPanel sessions={sessions} currentSession={state?.currentSession} />
+        <section className="review-workspace single history-detail">
+          <div className="workspace-main">
+            <h2>Timeline da sessão atual</h2>
+            <Timeline session={state?.currentSession} />
+          </div>
+        </section>
       </section>
     </main>
   );
@@ -1106,7 +1359,7 @@ function GuidedTour({ active, steps, currentIndex, onNext, onBack, onSkip, onFin
 
 function getTourPopoverStyle(rect, placement = 'bottom') {
   const width = Math.min(380, Math.max(280, window.innerWidth - 32));
-  const height = 230;
+  const height = Math.min(260, Math.max(210, window.innerHeight - 32));
   const gap = 18;
   const margin = 16;
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max);

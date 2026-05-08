@@ -1146,6 +1146,9 @@ var WorkspaceSourceFileProvider = class {
 
 // src/presentation/reviewPanel.ts
 var vscode2 = __toESM(require("vscode"));
+var import_node_child_process2 = require("node:child_process");
+var import_node_util2 = require("node:util");
+var execFileAsync2 = (0, import_node_util2.promisify)(import_node_child_process2.execFile);
 var ReviewPanel = class {
   constructor(context, service) {
     this.context = context;
@@ -1281,12 +1284,19 @@ var ReviewPanel = class {
       await this.postState();
     }
     if (message.type === "openWorkspaceFile" && typeof message.payload?.file === "string") {
-      await this.openWorkspaceFile(message.payload.file, typeof message.payload.line === "number" ? message.payload.line : 1);
+      await this.openWorkspaceFile(
+        message.payload.file,
+        typeof message.payload.line === "number" ? message.payload.line : 1,
+        typeof message.payload.commit === "string" ? message.payload.commit : "HEAD"
+      );
       this.post({ type: "operationCompleted", payload: { message: `Arquivo aberto: ${message.payload.file}` } });
     }
     if (message.type === "openDiff" && typeof message.payload?.file === "string") {
-      await this.openWorkspaceFile(message.payload.file, typeof message.payload.line === "number" ? message.payload.line : 1);
-      this.post({ type: "operationCompleted", payload: { message: `Diff/arquivo aberto: ${message.payload.file}` } });
+      await this.openGitDiff(
+        message.payload.file,
+        typeof message.payload.commit === "string" ? message.payload.commit : "HEAD"
+      );
+      this.post({ type: "operationCompleted", payload: { message: `Diff aberto: ${message.payload.file}` } });
     }
     if (message.type === "exportReviewReport") {
       const state = await this.service.getDashboardState();
@@ -1305,23 +1315,126 @@ var ReviewPanel = class {
       const backupPath = await this.service.createBackup();
       this.post({ type: "operationCompleted", payload: { message: `Backup criado em: ${backupPath}` } });
     }
+    if (message.type === "loadGitFile" && typeof message.payload?.file === "string") {
+      const payload = await this.loadGitFile(
+        message.payload.file,
+        typeof message.payload.commit === "string" ? message.payload.commit : "HEAD"
+      );
+      this.post({ type: "gitFileLoaded", payload });
+    }
+    if (message.type === "loadCommitFiles" && typeof message.payload?.commit === "string") {
+      const payload = await this.loadCommitFiles(message.payload.commit);
+      this.post({ type: "commitFilesLoaded", payload });
+    }
     if (message.type === "syncRemote") {
       const syncedPath = await this.service.syncRemote();
       this.post({ type: "operationCompleted", payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
     }
   }
-  async openWorkspaceFile(file, line = 1) {
+  async loadCommitFiles(commit = "HEAD") {
+    const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("Abra um workspace para carregar arquivos do commit.");
+    }
+    const normalizedCommit = commit?.trim() || "HEAD";
+    const cwd = workspaceFolder.uri.fsPath;
+    const strategies = [
+      ["diff-tree", "--no-commit-id", "--name-only", "-r", normalizedCommit],
+      ["show", "--format=", "--name-only", normalizedCommit],
+      ["diff", "--name-only", `${normalizedCommit}^`, normalizedCommit]
+    ];
+    for (const args of strategies) {
+      try {
+        const { stdout } = await execFileAsync2("git", args, { cwd, maxBuffer: 1024 * 1024 * 4 });
+        const files = stdout.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("commit ") && !line.startsWith("Author:") && !line.startsWith("Date:"));
+        if (files.length) {
+          return { commit: normalizedCommit, files: Array.from(new Set(files)) };
+        }
+      } catch {
+      }
+    }
+    return { commit: normalizedCommit, files: [] };
+  }
+  async loadGitFile(file, commit = "HEAD") {
+    const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("Abra um workspace para carregar arquivos do Git.");
+    }
+    const cwd = workspaceFolder.uri.fsPath;
+    const normalized = file.replace(/^\/+/, "");
+    const [content, diff] = await Promise.all([
+      this.readGitFile(cwd, normalized, commit),
+      this.readGitDiff(cwd, normalized, commit)
+    ]);
+    return { file: normalized, commit, content, diff };
+  }
+  async readGitFile(cwd, file, commit) {
+    const normalizedCommit = commit?.trim() || "HEAD";
+    try {
+      const { stdout } = await execFileAsync2("git", ["show", `${normalizedCommit}:${file}`], { cwd, maxBuffer: 1024 * 1024 * 8 });
+      return stdout;
+    } catch {
+    }
+    try {
+      const uri = vscode2.Uri.joinPath(vscode2.Uri.file(cwd), file);
+      const bytes = await vscode2.workspace.fs.readFile(uri);
+      return Buffer.from(bytes).toString("utf8");
+    } catch {
+      return [
+        `// Arquivo nao encontrado no workspace atual: ${file}`,
+        `// Commit/base solicitado: ${normalizedCommit}`,
+        "// Isso pode acontecer quando o arquivo foi removido, renomeado, pertence a outro branch ou existe apenas no diff.",
+        "// Use o painel de Diff para revisar a alteracao sem depender do arquivo fisico."
+      ].join("\n");
+    }
+  }
+  async readGitDiff(cwd, file, commit = "HEAD") {
+    const normalizedCommit = commit?.trim() || "HEAD";
+    const diffCommands = [
+      ["diff", "--", file],
+      ["diff", "--cached", "--", file],
+      ["diff", `${normalizedCommit}^!`, "--", file],
+      ["show", "--format=", "--patch", normalizedCommit, "--", file]
+    ];
+    for (const args of diffCommands) {
+      try {
+        const { stdout } = await execFileAsync2("git", args, { cwd, maxBuffer: 1024 * 1024 * 12 });
+        if (stdout.trim()) return stdout;
+      } catch {
+      }
+    }
+    return `Sem diff dispon\xEDvel para este arquivo no contexto atual: ${file}`;
+  }
+  async openWorkspaceFile(file, line = 1, commit = "HEAD") {
     const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error("Abra um workspace para navegar at\xE9 arquivos da revis\xE3o.");
     }
     const normalized = file.replace(/^\/+/, "");
     const uri = vscode2.Uri.joinPath(workspaceFolder.uri, normalized);
-    const document = await vscode2.workspace.openTextDocument(uri);
-    const editor = await vscode2.window.showTextDocument(document, { preview: false });
-    const position = new vscode2.Position(Math.max(0, line - 1), 0);
-    editor.selection = new vscode2.Selection(position, position);
-    editor.revealRange(new vscode2.Range(position, position), vscode2.TextEditorRevealType.InCenter);
+    try {
+      await vscode2.workspace.fs.stat(uri);
+      const document2 = await vscode2.workspace.openTextDocument(uri);
+      const editor = await vscode2.window.showTextDocument(document2, { preview: false });
+      const position = new vscode2.Position(Math.max(0, line - 1), 0);
+      editor.selection = new vscode2.Selection(position, position);
+      editor.revealRange(new vscode2.Range(position, position), vscode2.TextEditorRevealType.InCenter);
+      return;
+    } catch {
+    }
+    const content = await this.readGitFile(workspaceFolder.uri.fsPath, normalized, commit);
+    const document = await vscode2.workspace.openTextDocument({ content, language: guessLanguage(normalized) });
+    await vscode2.window.showTextDocument(document, { preview: false });
+  }
+  async openGitDiff(file, commit = "HEAD") {
+    const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("Abra um workspace para navegar at\xE9 arquivos da revis\xE3o.");
+    }
+    const normalized = file.replace(/^\/+/, "");
+    const diff = await this.readGitDiff(workspaceFolder.uri.fsPath, normalized, commit);
+    const document = await vscode2.workspace.openTextDocument({ content: diff, language: "diff" });
+    await vscode2.window.showTextDocument(document, { preview: false });
   }
   handleError(error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1370,6 +1483,16 @@ function buildMarkdownReport(state) {
     ...session?.history?.length ? session.history.map((entry) => `- ${entry.createdAt} \u2014 ${entry.message}`) : ["- Sem hist\xF3rico."]
   ];
   return lines2.filter((line) => line !== "").join("\n");
+}
+function guessLanguage(file) {
+  if (file.endsWith(".ts") || file.endsWith(".tsx")) return "typescript";
+  if (file.endsWith(".js") || file.endsWith(".jsx")) return "javascript";
+  if (file.endsWith(".json")) return "json";
+  if (file.endsWith(".md")) return "markdown";
+  if (file.endsWith(".php")) return "php";
+  if (file.endsWith(".css")) return "css";
+  if (file.endsWith(".html")) return "html";
+  return "plaintext";
 }
 function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
   const distUri = vscode2.Uri.joinPath(extensionUri, "webview-ui", "dist");
