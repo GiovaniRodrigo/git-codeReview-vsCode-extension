@@ -37,6 +37,17 @@ module.exports = __toCommonJS(extension_exports);
 var vscode2 = __toESM(require("vscode"));
 
 // src/domain/reviewSession.ts
+var REVIEW_SESSION_STATUSES = [
+  "OPEN",
+  "IN_REVIEW",
+  "NEEDS_CHANGES",
+  "FIXED",
+  "APPROVED",
+  "REOPENED"
+];
+function isReviewSessionStatus(value) {
+  return REVIEW_SESSION_STATUSES.includes(value);
+}
 function createReviewSession(input) {
   if (!input.git.currentBranch) {
     throw new Error("A branch origem e obrigatoria para criar uma review session.");
@@ -64,12 +75,118 @@ function createReviewSession(input) {
     pullRequestId: input.git.pullRequestId,
     changedFiles: input.git.changedFiles,
     commits: input.git.commits,
+    comments: [],
     history: [
       {
         id: `${id}-created`,
         type: "SESSION_CREATED",
         message: `Review criada para ${input.git.currentBranch} -> ${input.git.baseBranch}`,
         createdAt: now
+      }
+    ]
+  };
+}
+function addReviewComment(session, input) {
+  if (!input.body.trim()) {
+    throw new Error("O comentario nao pode ser vazio.");
+  }
+  if (!input.author.trim()) {
+    throw new Error("O autor do comentario e obrigatorio.");
+  }
+  if (!input.file.trim()) {
+    throw new Error("O arquivo do comentario e obrigatorio.");
+  }
+  if (!Number.isInteger(input.line) || input.line < 1) {
+    throw new Error("A linha do comentario deve ser maior que zero.");
+  }
+  const updatedAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const comments = session.comments ?? [];
+  const id = input.id ?? `${session.id}-comment-${comments.length + 1}`;
+  const threadId = input.threadId ?? id;
+  const comment = {
+    id,
+    threadId,
+    body: input.body.trim(),
+    author: input.author,
+    file: input.file,
+    line: input.line,
+    commit: input.commit,
+    createdAt: updatedAt,
+    updatedAt,
+    history: []
+  };
+  return {
+    ...session,
+    comments: [...comments, comment],
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-comment-added-${session.history.length + 1}`,
+        type: "COMMENT_ADDED",
+        message: `Comentario adicionado em ${input.file}:${input.line}`,
+        createdAt: updatedAt
+      }
+    ]
+  };
+}
+function editReviewComment(session, commentId, body, editor, now = /* @__PURE__ */ new Date()) {
+  if (!body.trim()) {
+    throw new Error("O comentario nao pode ser vazio.");
+  }
+  const existingComments = session.comments ?? [];
+  const comment = existingComments.find((item) => item.id === commentId);
+  if (!comment) {
+    throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+  const updatedAt = now.toISOString();
+  const comments = existingComments.map((item) => {
+    if (item.id !== commentId) return item;
+    return {
+      ...item,
+      body: body.trim(),
+      updatedAt,
+      history: [
+        ...item.history,
+        {
+          body: item.body,
+          editedAt: updatedAt,
+          editor
+        }
+      ]
+    };
+  });
+  return {
+    ...session,
+    comments,
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-comment-edited-${session.history.length + 1}`,
+        type: "COMMENT_EDITED",
+        message: `Comentario editado em ${comment.file}:${comment.line}`,
+        createdAt: updatedAt
+      }
+    ]
+  };
+}
+function navigateReviewSession(session, target, now = /* @__PURE__ */ new Date()) {
+  if (!target.ref.trim()) {
+    throw new Error("A referencia de navegacao e obrigatoria.");
+  }
+  const updatedAt = now.toISOString();
+  return {
+    ...session,
+    activeNavigation: target,
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-navigation-${session.history.length + 1}`,
+        type: "NAVIGATION_CHANGED",
+        message: `Navegacao alterada para ${target.kind}: ${target.ref}`,
+        createdAt: updatedAt
       }
     ]
   };
@@ -95,6 +212,26 @@ function updateReviewSessionGitContext(session, git2, now = /* @__PURE__ */ new 
     ]
   };
 }
+function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Date()) {
+  if (session.status === status) {
+    return session;
+  }
+  const updatedAt = now.toISOString();
+  return {
+    ...session,
+    status,
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-status-${session.history.length + 1}`,
+        type: "STATUS_CHANGED",
+        message: `Status alterado de ${session.status} para ${status}`,
+        createdAt: updatedAt
+      }
+    ]
+  };
+}
 
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
@@ -115,6 +252,48 @@ var ReviewSessionService = class {
     const existing = await this.repository.getCurrent();
     const session = existing ? updateReviewSessionGitContext(existing, git2) : createReviewSession({ git: git2, author, reviewer });
     await this.repository.saveCurrent(session);
+    return session;
+  }
+  async openReview(id) {
+    const session = await this.repository.getById(id);
+    if (!session) {
+      throw new Error(`Review session nao encontrada: ${id}`);
+    }
+    await this.repository.saveCurrent(session);
+    return session;
+  }
+  async updateStatus(id, status) {
+    const session = await this.repository.getById(id);
+    if (!session) {
+      throw new Error(`Review session nao encontrada: ${id}`);
+    }
+    const updated = updateReviewSessionStatus(session, status);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async navigate(id, target) {
+    const session = await this.getExistingSession(id);
+    const updated = navigateReviewSession(session, target);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async addComment(id, input) {
+    const session = await this.getExistingSession(id);
+    const updated = addReviewComment(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async editComment(id, commentId, body, editor) {
+    const session = await this.getExistingSession(id);
+    const updated = editReviewComment(session, commentId, body, editor);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async getExistingSession(id) {
+    const session = await this.repository.getById(id);
+    if (!session) {
+      throw new Error(`Review session nao encontrada: ${id}`);
+    }
     return session;
   }
 };
@@ -192,6 +371,10 @@ var VscodeReviewSessionRepository = class {
   async list() {
     return this.context.workspaceState.get(SESSIONS_KEY, []);
   }
+  async getById(id) {
+    const sessions = await this.list();
+    return sessions.find((session) => session.id === id);
+  }
   async saveCurrent(session) {
     const sessions = await this.list();
     const nextSessions = [session, ...sessions.filter((item) => item.id !== session.id)];
@@ -247,6 +430,38 @@ var ReviewPanel = class {
     if (message.type === "startReview") {
       await this.startReview();
     }
+    if (message.type === "openReview" && typeof message.payload?.id === "string") {
+      await this.service.openReview(message.payload.id);
+      await this.postState();
+    }
+    if (message.type === "updateReviewStatus" && typeof message.payload?.id === "string" && typeof message.payload?.status === "string" && isReviewSessionStatus(message.payload.status)) {
+      await this.service.updateStatus(message.payload.id, message.payload.status);
+      await this.postState();
+    }
+    if (message.type === "navigateReview" && typeof message.payload?.id === "string" && isNavigationKind(message.payload.kind) && typeof message.payload.ref === "string") {
+      await this.service.navigate(message.payload.id, {
+        kind: message.payload.kind,
+        ref: message.payload.ref,
+        file: typeof message.payload.file === "string" ? message.payload.file : void 0,
+        line: typeof message.payload.line === "number" ? message.payload.line : void 0
+      });
+      await this.postState();
+    }
+    if (message.type === "addReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.body === "string" && typeof message.payload.file === "string" && typeof message.payload.line === "number") {
+      await this.service.addComment(message.payload.id, {
+        body: message.payload.body,
+        author: vscode.env.machineId,
+        file: message.payload.file,
+        line: message.payload.line,
+        commit: typeof message.payload.commit === "string" ? message.payload.commit : void 0,
+        threadId: typeof message.payload.threadId === "string" ? message.payload.threadId : void 0
+      });
+      await this.postState();
+    }
+    if (message.type === "editReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.body === "string") {
+      await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode.env.machineId);
+      await this.postState();
+    }
   }
   async postState() {
     const state = await this.service.getDashboardState();
@@ -256,6 +471,9 @@ var ReviewPanel = class {
     this.panel?.webview.postMessage(message);
   }
 };
+function isNavigationKind(value) {
+  return value === "commit" || value === "diff" || value === "file" || value === "comment" || value === "validation";
+}
 function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
   const distUri = vscode.Uri.joinPath(extensionUri, "webview-ui", "dist");
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "assets", "index.js"));

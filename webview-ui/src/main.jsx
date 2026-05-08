@@ -6,11 +6,15 @@ import {
   CheckCircle2,
   Clock3,
   FileDown,
+  FolderOpen,
+  GitCommit,
   GitPullRequest,
   Home,
   Info,
+  ListChecks,
   MessageSquare,
   MoreVertical,
+  Pencil,
   Play,
   RefreshCw,
   Settings,
@@ -36,6 +40,7 @@ function ReviewLeftbar({ view, setView, state }) {
   const nav = [
     ['dashboard', Home, 'Dashboard', '82'],
     ['analysis', AlertTriangle, 'Diagnósticos', '25'],
+    ['comments', MessageSquare, 'Comentários', session?.comments?.length ? String(session.comments.length) : ''],
     ['conformities', CheckCircle2, 'Conformidades', '68'],
     ['telemetry', BarChart3, 'Telemetria', '94%'],
     ['history', Clock3, 'Histórico', '12'],
@@ -92,7 +97,8 @@ function RuleItem({ color, label, count }) {
 
 function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'telemetry') return <TelemetryCenter />;
-  if (view === 'history') return <HistoryCenter />;
+  if (view === 'history') return <HistoryCenter state={state} />;
+  if (view === 'comments') return <CommentsCenter state={state} />;
   if (view === 'settings') return <SettingsCenter />;
   if (view === 'conformities') return <ConformitiesCenter />;
 
@@ -126,9 +132,13 @@ function ReviewCenter({ view, state, onStartReview }) {
 
         <aside className="workspace-side">
           <h3>Fluxo reviewer/developer</h3>
-          <Timeline />
+          <Timeline session={state?.currentSession} />
         </aside>
       </section>
+
+      <ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} />
+      <NavigationPanel session={state?.currentSession} git={state?.git} />
+      <CommentsPanel session={state?.currentSession} />
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -136,6 +146,119 @@ function ReviewCenter({ view, state, onStartReview }) {
         <InsightCard title="Tratamento de Erro" severity="Erro" text="Erro genérico usado em fluxo de domínio. Padronizar Result/Error." />
       </section>
     </main>
+  );
+}
+
+function NavigationPanel({ session, git }) {
+  const firstFile = session?.changedFiles?.[0] ?? git?.changedFiles?.[0] ?? 'src/extension.ts';
+  const firstCommit = session?.commits?.[0] ?? git?.commits?.[0] ?? 'HEAD';
+  const firstComment = session?.comments?.[0];
+  const targets = [
+    ['commit', GitCommit, 'Commit', firstCommit],
+    ['diff', GitPullRequest, 'Diff', firstFile],
+    ['file', FolderOpen, 'Arquivo', firstFile],
+    ['comment', MessageSquare, 'Comentário', firstComment?.id ?? 'sem-comentario'],
+    ['validation', ListChecks, 'Validação', 'validation-preview']
+  ];
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Navegação</h2>
+          <p className="muted">Atalhos da sessão para commits, diffs, arquivos, comentários e validações.</p>
+        </div>
+        {session?.activeNavigation && <span className="active-target">{session.activeNavigation.kind}: {session.activeNavigation.ref}</span>}
+      </div>
+      <div className="navigation-grid">
+        {targets.map(([kind, Icon, label, ref]) => (
+          <button
+            key={kind}
+            disabled={!session}
+            onClick={() => vscodeApi?.postMessage({
+              type: 'navigateReview',
+              payload: {
+                id: session.id,
+                kind,
+                ref,
+                file: kind === 'file' || kind === 'diff' ? ref : firstFile,
+                line: kind === 'comment' && firstComment ? firstComment.line : undefined
+              }
+            })}
+          >
+            <Icon size={18} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CommentsPanel({ session }) {
+  const [draft, setDraft] = useState('Revisar responsabilidade deste trecho.');
+  const [line, setLine] = useState(1);
+  const file = session?.changedFiles?.[0] ?? 'src/extension.ts';
+
+  const addComment = () => {
+    if (!session || !draft.trim()) return;
+    vscodeApi?.postMessage({
+      type: 'addReviewComment',
+      payload: {
+        id: session.id,
+        body: draft,
+        file,
+        line: Number(line) || 1,
+        commit: session.commits?.[0]
+      }
+    });
+    setDraft('');
+  };
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Comentários</h2>
+          <p className="muted">Comentários vinculados ao código, com threads e histórico de edição.</p>
+        </div>
+      </div>
+      <div className="comment-form">
+        <input value={file} readOnly />
+        <input type="number" min="1" value={line} onChange={(event) => setLine(event.target.value)} />
+        <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+        <button disabled={!session || !draft.trim()} onClick={addComment}><MessageSquare size={16} /> Inserir</button>
+      </div>
+      <div className="comments-list">
+        {session?.comments?.length ? session.comments.map((comment) => (
+          <CommentItem key={comment.id} session={session} comment={comment} />
+        )) : <p className="empty-state">Nenhum comentário registrado nesta sessão.</p>}
+      </div>
+    </section>
+  );
+}
+
+function CommentItem({ session, comment }) {
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(comment.body);
+
+  return (
+    <article className="comment-item">
+      <header>
+        <span>{comment.file}:{comment.line}</span>
+        <button onClick={() => setEditing((value) => !value)}><Pencil size={15} /></button>
+      </header>
+      {editing ? (
+        <div className="comment-edit">
+          <input value={body} onChange={(event) => setBody(event.target.value)} />
+          <button onClick={() => {
+            vscodeApi?.postMessage({ type: 'editReviewComment', payload: { id: session.id, commentId: comment.id, body } });
+            setEditing(false);
+          }}>Salvar</button>
+        </div>
+      ) : <p>{comment.body}</p>}
+      <small>Thread {comment.threadId} · {comment.history.length} edições</small>
+    </article>
   );
 }
 
@@ -215,8 +338,11 @@ function InsightCard({ title, severity, text }) {
   );
 }
 
-function Timeline() {
-  const steps = [
+function Timeline({ session }) {
+  const steps = session?.history?.length ? session.history.map((entry) => [
+    entry.type === 'SESSION_CREATED' ? 'Sessão criada' : entry.type === 'STATUS_CHANGED' ? 'Status atualizado' : 'Git atualizado',
+    entry.message
+  ]) : [
     ['PR criada', 'feature/auth-refactor'],
     ['Review executada', '25 violações encontradas'],
     ['Comentários gerados', '3 críticos, 7 avisos'],
@@ -224,7 +350,55 @@ function Timeline() {
     ['Revalidação pendente', 'Após novos commits']
   ];
 
-  return <div className="timeline">{steps.map(([title, text]) => <div key={title}><b>{title}</b><p>{text}</p></div>)}</div>;
+  return <div className="timeline">{steps.map(([title, text], index) => <div key={`${title}-${index}`}><b>{title}</b><p>{text}</p></div>)}</div>;
+}
+
+function ReviewSessionsPanel({ sessions = [], currentSession }) {
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Sessões de review</h2>
+          <p className="muted">Histórico local das sessões registradas neste workspace.</p>
+        </div>
+        {currentSession && <StatusControls session={currentSession} />}
+      </div>
+      <div className="sessions-list">
+        {sessions.length ? sessions.map((session) => (
+          <button
+            key={session.id}
+            className={currentSession?.id === session.id ? 'session-row active' : 'session-row'}
+            onClick={() => vscodeApi?.postMessage({ type: 'openReview', payload: { id: session.id } })}
+          >
+            <FolderOpen size={17} />
+            <span>
+              <strong>{session.sourceBranch}</strong>
+              <small>{session.targetBranch} · {session.history.length} eventos</small>
+            </span>
+            <b>{session.status}</b>
+          </button>
+        )) : <p className="empty-state">Nenhuma sessão criada ainda.</p>}
+      </div>
+    </section>
+  );
+}
+
+function StatusControls({ session }) {
+  const statuses = ['OPEN', 'IN_REVIEW', 'NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'];
+
+  return (
+    <div className="status-controls" aria-label="Status da revisão">
+      {statuses.map((status) => (
+        <button
+          key={status}
+          className={session.status === status ? 'active' : ''}
+          onClick={() => vscodeApi?.postMessage({ type: 'updateReviewStatus', payload: { id: session.id, status } })}
+        >
+          {status}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function Rightbar() {
@@ -303,8 +477,31 @@ function Issue({ icon, title, text, label }) {
 function TelemetryCenter() {
   return <SimpleCenter title="Telemetria de engenharia" subtitle="Reincidências, regras mais violadas, tempo médio de correção e evolução por PR." />;
 }
-function HistoryCenter() {
-  return <SimpleCenter title="Histórico de revisões" subtitle="Linha do tempo de reviews, correções, revalidações e decisões de aprovação." />;
+function HistoryCenter({ state }) {
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div><span className="eyebrow">Code Review</span><h1>Histórico de revisões</h1><p>Linha do tempo de reviews, correções, revalidações e decisões de aprovação.</p></div>
+      </header>
+      <ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} />
+      <section className="review-workspace single">
+        <div className="workspace-main">
+          <h2>Timeline da sessão atual</h2>
+          <Timeline session={state?.currentSession} />
+        </div>
+      </section>
+    </main>
+  );
+}
+function CommentsCenter({ state }) {
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div><span className="eyebrow">Code Review</span><h1>Comentários da revisão</h1><p>Threads vinculadas a arquivo, linha e commit.</p></div>
+      </header>
+      <CommentsPanel session={state?.currentSession} />
+    </main>
+  );
 }
 function SettingsCenter() {
   return <SimpleCenter title="Configurações de regras" subtitle="Perfis de arquitetura, severidades, exclusões e padrões obrigatórios por projeto." />;
@@ -341,7 +538,11 @@ function App() {
       }
 
       if (event.data?.type === 'reviewSessionStarted') {
-        setState((current) => ({ ...current, currentSession: event.data.payload }));
+        setState((current) => ({
+          ...current,
+          currentSession: event.data.payload,
+          sessions: [event.data.payload, ...(current?.sessions ?? []).filter((session) => session.id !== event.data.payload.id)]
+        }));
       }
     };
 

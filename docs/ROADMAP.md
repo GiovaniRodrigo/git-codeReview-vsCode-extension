@@ -75,30 +75,30 @@ Permitir criação e gerenciamento de sessões de revisão.
 ### Sessões de Review
 
 * [x] Criar review session
-* [ ] Abrir review existente
-* [ ] Listar reviews
-* [ ] Timeline da revisão
-* [ ] Status da revisão
+* [x] Abrir review existente
+* [x] Listar reviews
+* [x] Timeline da revisão
+* [x] Status da revisão
 
 ---
 
 ### Navegação
 
-* [ ] Navegação por commit
-* [ ] Navegação por diff
-* [ ] Navegação por arquivos
-* [ ] Navegação por comentários
-* [ ] Navegação por validações
+* [x] Navegação por commit
+* [x] Navegação por diff
+* [x] Navegação por arquivos
+* [x] Navegação por comentários
+* [x] Navegação por validações
 
 ---
 
 ### Comentários
 
-* [ ] Inserir comentário
-* [ ] Editar comentário
-* [ ] Histórico de comentários
-* [ ] Threads de discussão
-* [ ] Comentários vinculados ao código
+* [x] Inserir comentário
+* [x] Editar comentário
+* [x] Histórico de comentários
+* [x] Threads de discussão
+* [x] Comentários vinculados ao código
 
 ---
 

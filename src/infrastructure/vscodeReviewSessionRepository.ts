@@ -16,6 +16,11 @@ export class VscodeReviewSessionRepository implements ReviewSessionRepository {
     return this.context.workspaceState.get<ReviewSession[]>(SESSIONS_KEY, []);
   }
 
+  async getById(id: string): Promise<ReviewSession | undefined> {
+    const sessions = await this.list();
+    return sessions.find((session) => session.id === id);
+  }
+
   async saveCurrent(session: ReviewSession): Promise<void> {
     const sessions = await this.list();
     const nextSessions = [session, ...sessions.filter((item) => item.id !== session.id)];

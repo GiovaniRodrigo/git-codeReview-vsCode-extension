@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ReviewSessionService } from '../application/reviewSessionService';
+import { isReviewSessionStatus, ReviewNavigationKind } from '../domain/reviewSession';
 
 type ReviewView = 'dashboard' | 'analysis';
 
@@ -51,13 +52,71 @@ export class ReviewPanel {
     vscode.window.showInformationMessage('Review session iniciada.');
   }
 
-  private async handleMessage(message: { type?: string }): Promise<void> {
+  private async handleMessage(message: { type?: string; payload?: Record<string, unknown> }): Promise<void> {
     if (message.type === 'requestState') {
       await this.postState();
     }
 
     if (message.type === 'startReview') {
       await this.startReview();
+    }
+
+    if (message.type === 'openReview' && typeof message.payload?.id === 'string') {
+      await this.service.openReview(message.payload.id);
+      await this.postState();
+    }
+
+    if (
+      message.type === 'updateReviewStatus'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload?.status === 'string'
+      && isReviewSessionStatus(message.payload.status)
+    ) {
+      await this.service.updateStatus(message.payload.id, message.payload.status);
+      await this.postState();
+    }
+
+    if (
+      message.type === 'navigateReview'
+      && typeof message.payload?.id === 'string'
+      && isNavigationKind(message.payload.kind)
+      && typeof message.payload.ref === 'string'
+    ) {
+      await this.service.navigate(message.payload.id, {
+        kind: message.payload.kind,
+        ref: message.payload.ref,
+        file: typeof message.payload.file === 'string' ? message.payload.file : undefined,
+        line: typeof message.payload.line === 'number' ? message.payload.line : undefined
+      });
+      await this.postState();
+    }
+
+    if (
+      message.type === 'addReviewComment'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.body === 'string'
+      && typeof message.payload.file === 'string'
+      && typeof message.payload.line === 'number'
+    ) {
+      await this.service.addComment(message.payload.id, {
+        body: message.payload.body,
+        author: vscode.env.machineId,
+        file: message.payload.file,
+        line: message.payload.line,
+        commit: typeof message.payload.commit === 'string' ? message.payload.commit : undefined,
+        threadId: typeof message.payload.threadId === 'string' ? message.payload.threadId : undefined
+      });
+      await this.postState();
+    }
+
+    if (
+      message.type === 'editReviewComment'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.commentId === 'string'
+      && typeof message.payload.body === 'string'
+    ) {
+      await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode.env.machineId);
+      await this.postState();
     }
   }
 
@@ -69,6 +128,10 @@ export class ReviewPanel {
   private post(message: unknown): void {
     this.panel?.webview.postMessage(message);
   }
+}
+
+function isNavigationKind(value: unknown): value is ReviewNavigationKind {
+  return value === 'commit' || value === 'diff' || value === 'file' || value === 'comment' || value === 'validation';
 }
 
 function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri, initialView = 'dashboard'): string {
