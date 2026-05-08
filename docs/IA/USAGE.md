@@ -1,65 +1,54 @@
-# Guia de Uso da Pasta IA
+# Guia de Uso: Context-Driven Development (CDD)
 
-Este guia explica como usar a pasta `IA/` para colaborar com agentes de IA no projeto **Code Review Extension**.
+Este guia explica como utilizar este modelo de repositório para colaborar de forma eficiente com agentes de IA (como o Gemini CLI), garantindo qualidade de código e documentação sempre atualizada no projeto **Git Code Review Extension**.
 
-## 1. Antes de Pedir uma Funcionalidade
+## 1. Inicialização do Projeto
 
-Verifique se a necessidade esta em uma das fases do `ROADMAP.md`.
+Este projeto já está configurado para CDD. Se você estiver começando um novo módulo:
 
-Se estiver, mencione a fase ou a tarefa. Exemplo:
+1.  **Garanta a Estrutura:**
+    As pastas `docs/IA/` devem conter os arquivos de contexto atualizados.
+2.  **Stack do Projeto:**
+    A stack atual é **TypeScript, VS Code API, Git**.
+3.  **Preencha os Contextos:**
+    Mantenha o `docs/IA/CLEAN_CONTEXT.md` sincronizado com a realidade da stack e das entidades core (Review, Commit, File, Branch, Tag).
+4.  **Revise os Princípios de IA:**
+    Siga `docs/IA/AI_DEVELOPMENT_PRINCIPLES.md` para garantir que o uso de IA amplie sua engenharia sem comprometer a qualidade.
 
-```text
-IA, implemente a Fase 1: detectar repositorio Git aberto e listar branches locais.
-```
+## 2. O Ciclo de Desenvolvimento com IA
 
-Se nao estiver, descreva o comportamento esperado e peça para a IA atualizar o plano quando fizer sentido.
+Ao solicitar uma nova funcionalidade ou correção para a IA, o fluxo seguido será automaticamente:
 
-## 2. Ciclo de Desenvolvimento
+### Passo A: Definição da Regra
+A IA buscará ou proporá uma regra de negócio em `docs/BUSINESS_RULES/`.
+*   **Ação do Usuário:** Validar se a regra proposta reflete o comportamento desejado. Digite `[APROVADO]` para prosseguir.
 
-O fluxo recomendado e:
+### Passo B: Criação de Testes
+A IA criará os testes (unitários/integração) antes de tocar no código de produção.
+*   **Ação do Usuário:** Verificar se os testes cobrem os casos de sucesso e erro. Digite `[APROVADO]` para autorizar a implementação.
 
-1. A IA consulta `IA/CLEAN_CONTEXT.md` e `ROADMAP.md`.
-2. A IA identifica a fase e o comportamento esperado.
-3. A IA cria ou atualiza testes quando ja existir estrutura de projeto.
-4. A IA implementa a menor mudanca util.
-5. A IA executa `npm run compile`, `npm test` e `npm run lint` quando disponiveis.
-6. A IA atualiza documentacao afetada.
+### Passo C: Implementação e Sincronização
+A IA implementará o código e atualizará os arquivos em `docs/IA/` (especialmente o `CLEAN_CONTEXT.md` e `IMPLEMENTATION_PLAN.md`) para refletir a nova realidade do projeto.
 
-## 3. Comandos Uteis para o Usuario
+## 3. Comandos Úteis para o Usuário
 
-```text
-IA, atualize o CLEAN_CONTEXT.md com a estrutura atual do projeto.
-```
+Ao interagir com a IA, você pode usar comandos diretos para gerenciar o contexto:
 
-```text
-IA, transforme a Fase 1 do ROADMAP.md em tarefas tecnicas menores.
-```
+*   *"IA, atualize o CLEAN_CONTEXT.md com a nova estrutura de pastas que criamos manualmente."*
+*   *"IA, verifique se o IMPLEMENTATION_PLAN.md ainda faz sentido após as mudanças de hoje."*
+*   *"IA, siga o workflow para criar a funcionalidade X."*
 
-```text
-IA, siga o workflow para implementar a TreeView de branches.
-```
+## 4. Boas Práticas
 
-```text
-IA, revise se o IMPLEMENTATION_PLAN.md ainda bate com o ROADMAP.md.
-```
+1.  **Nunca pule o Workflow:** O rigor na etapa de testes é o que impede a degradação do código a longo prazo.
+2.  **Documentação é Código:** Trate mudanças nos arquivos de `docs/IA/` com a mesma importância que mudanças no código-fonte.
+3.  **Contexto Limpo, Resposta Rápida:** Mantenha o `CLEAN_CONTEXT.md` conciso. Se ele ficar muito grande, mova detalhes técnicos para arquivos específicos e deixe apenas o resumo.
+4.  **Agnosticismo:** Mantenha os mandatos do `GEMINI.md` genéricos o suficiente para que, se você mudar de linguagem (ex: de Python para Go), o processo de trabalho continue o mesmo.
+5.  **IA Amplifica Engenharia:** Use IA para acelerar boilerplate, CRUDs, documentação, testes, refatorações, scripts e automações, mas valide tudo com revisão, testes e medição quando aplicável.
 
-## 4. Boas Praticas
+## 5. Manutenção de Longo Prazo
 
-- Mantenha `ROADMAP.md` como visao de produto.
-- Mantenha `IA/CLEAN_CONTEXT.md` como resumo tecnico enxuto.
-- Atualize `IA/IMPLEMENTATION_PLAN.md` quando a arquitetura ou as fases mudarem.
-- Evite pedir muitas fases de uma vez; prefira entregas pequenas.
-- Para Fase 1, evite depender de rede ou GitHub.
-- Para GitHub, sempre preserve fallback para repositorios apenas Git local.
-
-## 5. Validacao
-
-Depois que o scaffold TypeScript existir, as validacoes padrao serao:
-
-```bash
-npm run compile
-npm test
-npm run lint
-```
-
-Enquanto esses scripts nao existirem, a IA deve informar que a verificacao automatizada ainda nao esta disponivel.
+À medida que o projeto cresce:
+- **Revise o Roadmap:** Atualize o `IMPLEMENTATION_PLAN.md` ao final de cada sprint ou marco importante.
+- **Pode Regras Obsoletas:** Remova regras de negócio em `docs/BUSINESS_RULES/` que não são mais válidas para evitar confusão no Agente de IA.
+- **Revise Produção:** Mantenha deploy, rollback, logs, métricas e alertas documentados para que a IA considere impactos operacionais antes de alterar fluxos críticos.

@@ -65,6 +65,14 @@ export class CommitService {
     return files;
   }
 
+  public async getCommitDiff(rootPath: string, hash: string): Promise<string> {
+    return this.git.run(["show", "--format=", "--patch", hash], rootPath);
+  }
+
+  public async getFileDiff(rootPath: string, hash: string, path: string): Promise<string> {
+    return this.git.run(["show", "--format=", "--patch", hash, "--", path], rootPath);
+  }
+
   public clearCache(): void {
     this.commitCache.clear();
     this.fileCache.clear();

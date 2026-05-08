@@ -1,131 +1,133 @@
-# Fluxo de Implementacao para IA - Code Review Extension
+# Fluxo de Implementação para IA - Modelo
 
-Este documento define o processo para uma IA implementar novas funcionalidades, ferramentas ou alteracoes relevantes no projeto **Code Review Extension**.
+Este documento define o processo obrigatório para uma IA implementar novas funcionalidades, ferramentas ou alterações relevantes no código do projeto **Git Code Review Extension**.
 
-## Regra Principal
+## Regra principal
 
 A IA deve seguir esta ordem:
 
-1. Entender a fase e a regra de produto.
-2. Criar ou atualizar testes quando a estrutura do projeto permitir.
-3. Implementar a funcionalidade no menor escopo possivel.
-4. Executar validacoes.
-5. Sincronizar documentacao afetada.
+1. Definir ou localizar a regra de negócio.
+2. Criar ou atualizar os testes com base em **test/**.
+3. Implementar a funcionalidade.
 
-Se a regra de produto nao existir e nao puder ser inferida com seguranca, a IA deve parar e pedir definicao ao usuario antes de alterar codigo.
+Se a regra de negócio não existir e não puder ser inferida com segurança, a IA deve interromper o trabalho com erro claro e pedir definição ao usuário antes de criar testes ou alterar código.
 
-## Etapa 1: Regra de Produto
+## Etapa 1: regra de negócio
 
-Antes de alterar arquivos, a IA deve identificar:
+Antes de qualquer alteração técnica, a IA deve identificar:
 
-- qual fase do `ROADMAP.md` sera atendida;
-- qual problema do usuario sera resolvido;
-- qual comportamento esperado no VS Code;
-- quais entradas sao aceitas;
-- quais saidas visuais ou efeitos sao esperados;
-- quais erros devem ser tratados;
-- quais limites e fallbacks existem.
+- qual problema de negócio será resolvido;
+- qual comportamento esperado;
+- quais entradas são aceitas;
+- quais saídas ou efeitos são esperados;
+- quais casos inválidos devem ser rejeitados;
+- quais limites, exceções ou fallbacks existem.
 
-A IA deve procurar contexto em:
+A IA deve procurar a regra em:
 
-- `IA/CLEAN_CONTEXT.md`;
-- `ROADMAP.md`;
-- `IA/IMPLEMENTATION_PLAN.md`;
-- testes existentes, quando houver;
-- codigo relacionado, quando houver;
-- mensagem mais recente do usuario.
+- documentação existente em **docs/**;
+- testes existentes em **test/**;
+- código relacionado em **src/**;
+- mensagens explícitas do usuário.
 
-Se a regra estiver ausente, ambigua ou contraditoria, informe:
+Se a regra estiver ausente, ambígua ou contraditória, interrompa com erro:
 
 ```text
-Erro: regra de produto ausente ou ambigua. Nao e seguro criar testes ou implementar sem definir o comportamento esperado.
+Erro: regra de negócio ausente ou ambígua. Não é seguro criar testes ou implementar sem definição do comportamento esperado.
 ```
 
-## Etapa 2: Plano Curto
+Depois, peça ao usuário a regra necessária.
 
-Antes de mudancas substanciais, a IA deve apresentar ou manter internamente um plano claro com:
+## Aprovação da etapa 1
 
-- arquivos provavelmente afetados;
-- comportamento esperado;
-- riscos conhecidos;
-- comandos de validacao.
+Antes de avançar para testes, a IA deve mostrar ao usuário:
 
-Para tarefas pequenas e objetivas, a IA pode executar diretamente desde que respeite o escopo e valide o resultado.
+- a regra de negócio encontrada ou proposta;
+- os arquivos que provavelmente serão afetados;
+- o plano de alteração de código ou documentação;
+- os riscos conhecidos.
 
-## Etapa 3: Testes
+A IA só deve avançar após aprovação explícita do usuário.
 
-Quando o projeto ja tiver scaffold de testes, crie ou atualize testes antes de implementar comportamento novo.
+## Etapa 2: testes
 
-Priorize testes para:
+Com a regra de negócio aprovada, a IA deve criar ou atualizar testes antes da implementação.
 
-- parse de saidas Git;
-- deteccao de repositorio Git;
-- listagem de branches, tags e commits;
-- normalizacao de arquivos alterados;
-- associacao branch/PR;
-- tratamento de erro de Git, GitHub e autenticacao.
+Use **test/** como referência obrigatória.
 
-Comandos previstos:
+Para regras que possam ser descritas como entradas e saídas esperadas, prefira utilizar as ferramentas de automação de testes do projeto (**npm run test**).
+
+Os testes devem cobrir:
+
+- caso feliz (sucesso);
+- entradas inválidas;
+- limites relevantes;
+- fallback ou erro esperado, quando houver;
+- regressões relacionadas à regra.
+
+## Aprovação da etapa 2
+
+Antes de implementar, a IA deve mostrar ao usuário:
+
+- quais testes serão criados ou alterados;
+- qual regra cada teste valida;
+- quais arquivos de teste serão modificados;
+- quais comandos serão usados para executar a validação.
+
+A IA só deve avançar para implementação após aprovação explícita do usuário.
+
+## Etapa 3: implementação
+
+Somente depois dos testes aprovados, a IA deve alterar o código da funcionalidade.
+
+A implementação deve:
+
+- seguir os padrões de arquitetura definidos para o projeto;
+- manter a alteração no menor escopo possível;
+- evitar refatorações não solicitadas;
+- preservar compatibilidade com a versão atual;
+- tratar erros de forma clara para o usuário.
+
+## Aprovação da etapa 3
+
+Antes de editar código de produção, a IA deve mostrar ao usuário:
+
+- plano de alteração por arquivo;
+- funções, métodos, classes ou módulos que serão alterados;
+- comportamento esperado depois da mudança;
+- impacto nos testes existentes;
+- comandos de verificação planejados.
+
+A IA só deve editar código de produção após aprovação explícita do usuário.
+
+## Verificação final
+
+Após implementar, a IA deve executar os testes aplicáveis.
+
+Comando padrão:
 
 ```bash
-npm test
-npm run lint
-npm run compile
+npm run test
 ```
 
-Se esses comandos ainda nao existirem, registre essa limitacao na resposta final.
+## Resultado esperado da IA
 
-## Etapa 4: Implementacao
+Ao final, a IA deve informar:
 
-A implementacao deve:
-
-- seguir a arquitetura de `IA/CLEAN_CONTEXT.md`;
-- manter Git local independente de GitHub;
-- encapsular execucao Git em servicos;
-- separar servicos de dados da UI;
-- usar APIs nativas do VS Code para TreeView, comandos, Webview e diff;
-- evitar refatoracoes globais nao solicitadas;
-- tratar erros com mensagens claras para o usuario.
-
-## Etapa 5: Verificacao Final
-
-Depois de implementar, a IA deve executar as validacoes aplicaveis:
-
-```bash
-npm run compile
-npm test
-npm run lint
-```
-
-Quando o projeto ainda nao tiver scripts, a IA deve validar por inspecao e declarar que a automacao ainda nao existe.
-
-## Resultado Esperado da IA
-
-Ao final, informar:
-
-- comportamento implementado;
-- arquivos alterados;
+- regra de negócio implementada;
 - testes criados ou alterados;
+- arquivos de produção alterados;
 - comandos executados;
-- resultado das validacoes;
-- riscos ou limitacoes residuais.
+- resultado dos testes;
+- qualquer limitação ou risco residual.
 
-## Restricoes
+## Restrições
 
-A IA nao deve:
+A IA não deve:
 
-- implementar funcionalidade sem comportamento esperado claro;
-- acoplar GitHub ao MVP Git local;
-- depender de rede para funcionalidades da Fase 1;
-- ignorar workspace sem repositorio Git;
-- remover comportamento existente sem aprovacao;
-- ignorar falha de teste, build ou lint.
-
-## Desenvolvimento de Funcionalidades de IA (IA Assistida)
-
-Para implementar recursos como Codex/Copilot na extensao:
-
-1. **Privacidade**: nunca envie codigo ou dados sensiveis para servicos externos sem acao/configuracao explicita do usuario.
-2. **Modularidade**: encapsule chamadas de IA em `src/ai/` para permitir multiplos provedores.
-3. **Fallback**: garanta que a UI nao quebre se a API de IA estiver offline ou o usuario nao tiver permissao/tokens.
-4. **UX**: use indicadores claros (ex: ícone ✨) para diferenciar sugestoes humanas de sugestoes de IA.
+- implementar funcionalidade sem regra de negócio definida;
+- criar testes depois da implementação, salvo correção explícita de teste quebrado;
+- alterar código de produção antes da aprovação do plano;
+- ampliar escopo sem consultar o usuário;
+- remover comportamento existente sem aprovação;
+- ignorar falha de teste.

@@ -3,13 +3,13 @@ import { BranchService } from "../git/branchService";
 import { CommitService } from "../git/commitService";
 import { GitService } from "../git/gitService";
 import { CommitSummary } from "../git/types";
-import { parseCommitFiles } from "../git/parsers";
-import { buildCompareModel } from "./compareModel";
-import { ComparePanel } from "./comparePanel";
+import { CompareDocument } from "./compareDocument";
+import { CompareController } from "./compareController";
 import { ReviewState } from "./reviewState";
 
 export class ProductivityService {
   public constructor(
+    private readonly context: vscode.ExtensionContext,
     private readonly git: GitService,
     private readonly branchService: BranchService,
     private readonly commitService: CommitService,
@@ -31,11 +31,8 @@ export class ProductivityService {
       return;
     }
 
-    const [nameStatusOutput, numstatOutput] = await Promise.all([
-      this.git.run(["diff", "--name-status", "-M", "-C", `${base}...${head}`], rootPath),
-      this.git.run(["diff", "--numstat", "-M", "-C", `${base}...${head}`], rootPath)
-    ]);
-    ComparePanel.open(buildCompareModel(rootPath, base, head, parseCommitFiles(nameStatusOutput, numstatOutput)));
+    const document = new CompareDocument(rootPath, base, head, this.git);
+    await CompareController.open(this.context, document);
   }
 
   public async showUnreviewed(rootPath: string, ref = "HEAD"): Promise<void> {

@@ -28,4 +28,12 @@ export class ConfigService {
   public static isTelemetryEnabled(): boolean {
     return this.get<boolean>("telemetry.enabled", false);
   }
+
+  public static isAIEnabled(): boolean {
+    return this.get<boolean>("ai.enabled", false);
+  }
+
+  public static getAIProvider(): string {
+    return this.get<string>("ai.provider", "mock");
+  }
 }

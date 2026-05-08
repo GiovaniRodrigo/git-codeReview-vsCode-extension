@@ -12,6 +12,8 @@ export interface ReviewFileModel {
   riskScore: number;
   reviewReason: string;
   reviewed: boolean;
+  aiSuggestions?: string[];
+  aiBugs?: string[];
 }
 
 export interface ReviewCommitModel {
@@ -29,6 +31,7 @@ export interface ReviewCommitModel {
   risk: ReviewRiskLevel;
   riskScore: number;
   reviewReason: string;
+  aiSummary?: string;
 }
 
 export interface ReviewModel {

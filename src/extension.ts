@@ -18,11 +18,14 @@ import { ProviderRegistry } from "./remote/providerRegistry";
 import { CodeReviewSummary, RemoteProvider } from "./remote/types";
 import { createGitDocumentUri, GitContentProvider, gitReviewScheme } from "./review/gitContentProvider";
 import { DiffRenderer } from "./review/diffRenderer";
-import { ReviewPanel } from "./review/reviewPanel";
+import { ReviewController } from "./review/reviewController";
+import { ReviewDocument } from "./review/reviewDocument";
 import { TelemetryService } from "./telemetry/telemetryService";
 import { BranchNode, BranchTreeProvider, CommitNode, FileNode, ReviewNode, TagNode } from "./tree/BranchTreeProvider";
 import { ConfigService } from "./utils/config";
 import { showError } from "./utils/error";
+import { AIService, MockAIProvider } from "./ai/aiService";
+import { TimedCache } from "./utils/cache";
 import { formatCommitDate, formatFileStats, formatFileStatus } from "./utils/format";
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -44,7 +47,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const reviewState = new ReviewState(context);
   const reviewProcessStore = new ReviewProcessStore(context);
   const telemetry = new TelemetryService(context);
-  const productivityService = new ProductivityService(git, branchService, commitService, reviewState);
+  
+  // AI Service Initialization
+  const aiCache = new TimedCache<string>(24 * 60 * 60 * 1000); // 24h cache
+  const aiProvider = new MockAIProvider(); // For now, only mock is available
+  const aiService = new AIService(aiProvider, {
+    enabled: ConfigService.isAIEnabled(),
+    provider: ConfigService.getAIProvider()
+  }, aiCache);
+
+  const productivityService = new ProductivityService(context, git, branchService, commitService, reviewState);
   const diffRenderer = new DiffRenderer(git);
   const treeProvider = new BranchTreeProvider(repositoryService, branchService, commitService, providerRegistry);
   let lastHead: string | undefined;
@@ -68,16 +80,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       telemetry.track("command.openReview", { target: node instanceof CommitNode ? "commit" : node instanceof TagNode ? "tag" : "branch" });
-      await openReview(context, commitService, reviewState, node);
+      await openReview(context, commitService, reviewState, aiService, node);
     }),
     vscode.commands.registerCommand("codeReview.createReviewProcess", async (node?: BranchNode | TagNode | CommitNode) => {
       telemetry.track("command.createReviewProcess");
-      await createReviewProcess(context, git, branchService, reviewProcessStore, commitService, reviewState, node);
+      await createReviewProcess(context, git, branchService, reviewProcessStore, commitService, reviewState, aiService, node);
     }),
     vscode.commands.registerCommand("codeReview.resumeReviewProcess", async () => {
       telemetry.track("command.resumeReviewProcess");
-      await resumeReviewProcess(context, git, reviewProcessStore, commitService, reviewState);
+      await resumeReviewProcess(context, git, reviewProcessStore, commitService, reviewState, aiService);
     }),
+
     vscode.commands.registerCommand("codeReview.completeReviewProcess", async () => {
       telemetry.track("command.completeReviewProcess");
       await completeReviewProcess(git, reviewProcessStore);
@@ -265,6 +278,7 @@ async function createReviewProcess(
   reviewProcessStore: ReviewProcessStore,
   commitService: CommitService,
   reviewState: ReviewState,
+  aiService: AIService,
   node?: BranchNode | TagNode | CommitNode
 ): Promise<void> {
   try {
@@ -290,7 +304,7 @@ async function createReviewProcess(
       ref: target.ref,
       commit: target instanceof CommitNode ? target.commit : undefined
     });
-    await openReviewProcess(context, reviewProcessStore, commitService, reviewState, process);
+    await openReviewProcess(context, reviewProcessStore, commitService, reviewState, aiService, process);
     vscode.window.showInformationMessage(`Review process saved: ${process.name}`);
   } catch (error) {
     await showError(error);
@@ -335,7 +349,8 @@ async function resumeReviewProcess(
   git: GitService,
   reviewProcessStore: ReviewProcessStore,
   commitService: CommitService,
-  reviewState: ReviewState
+  reviewState: ReviewState,
+  aiService: AIService
 ): Promise<void> {
   try {
     const rootPath = await git.getRepositoryRoot();
@@ -358,7 +373,7 @@ async function resumeReviewProcess(
       return;
     }
 
-    await openReviewProcess(context, reviewProcessStore, commitService, reviewState, selected.process);
+    await openReviewProcess(context, reviewProcessStore, commitService, reviewState, aiService, selected.process);
   } catch (error) {
     await showError(error);
   }
@@ -396,26 +411,38 @@ async function openReviewProcess(
   reviewProcessStore: ReviewProcessStore,
   commitService: CommitService,
   reviewState: ReviewState,
+  aiService: AIService,
   process: ReviewProcess
 ): Promise<void> {
   await reviewProcessStore.touch(process.id);
-  if (process.targetKind === "commit" && process.commitHash) {
-    const details = await commitService.getCommitDetails(process.rootPath, process.commitHash);
-    await ReviewPanel.openForCommit(context, commitService, reviewState, process.rootPath, process.ref, details);
-    return;
-  }
-
-  await ReviewPanel.openForRef(context, commitService, reviewState, process.rootPath, process.ref);
+  const document = new ReviewDocument(
+    process.rootPath,
+    process.ref,
+    commitService,
+    reviewState,
+    aiService,
+    process.targetKind === "commit" && process.commitHash ? { hash: process.commitHash } as any : undefined
+  );
+  await ReviewController.open(context, document);
 }
 
-async function openReview(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState, node: BranchNode | TagNode | CommitNode): Promise<void> {
+async function openReview(
+  context: vscode.ExtensionContext, 
+  commitService: CommitService, 
+  reviewState: ReviewState, 
+  aiService: AIService,
+  node: BranchNode | TagNode | CommitNode
+): Promise<void> {
   try {
-    if (node instanceof CommitNode) {
-      await ReviewPanel.openForCommit(context, commitService, reviewState, node.rootPath, node.ref, node.commit);
-      return;
-    }
-
-    await ReviewPanel.openForRef(context, commitService, reviewState, node.rootPath, node.ref);
+    const document = new ReviewDocument(
+      node.rootPath,
+      node.ref,
+      commitService,
+      reviewState,
+      aiService,
+      node instanceof CommitNode ? node.commit : undefined
+    );
+    await ReviewController.open(context, document);
   } catch (error) {
     await showError(error);
   }

@@ -1,41 +1,44 @@
 import * as vscode from "vscode";
-import { CommitService } from "../git/commitService";
-import { CommitSummary, GitRef } from "../git/types";
-import { ReviewState } from "../productivity/reviewState";
 import { createGitDocumentUri } from "./gitContentProvider";
-import { buildReviewModel, ReviewModel } from "./reviewModel";
+import { ReviewModel } from "./reviewModel";
+import { ReviewDocument } from "./reviewDocument";
 import { getCommonStyles } from "./styles";
+import { AIService, MockAIProvider } from "../ai/aiService";
+import { TimedCache } from "../utils/cache";
+import { ConfigService } from "../utils/config";
 
-export class ReviewPanel {
-  private static currentPanel: ReviewPanel | undefined;
+export class ReviewController {
+  private static currentController: ReviewController | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
-    private readonly commitService: CommitService,
-    private readonly reviewState: ReviewState
+    private readonly document: ReviewDocument
   ) {
     this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
     this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => this.handleMessage(message), undefined, this.disposables);
+    
+    // Subscribe to document changes
+    this.document.onDidChange((model) => this.render(model), undefined, this.disposables);
   }
 
-  public static async openForRef(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState, rootPath: string, ref: GitRef): Promise<void> {
-    const panel = ReviewPanel.createOrReuse(context, commitService, reviewState);
-    panel.panel.title = `Review: ${ref.name}`;
-    await panel.renderRef(rootPath, ref);
+  public static async open(context: vscode.ExtensionContext, document: ReviewDocument): Promise<void> {
+    const controller = ReviewController.createOrReuse(context, document);
+    
+    // Set title based on ref
+    controller.panel.title = document.ref.name;
+    
+    // Initial load and render
+    await document.load();
+    if (document.model) {
+      controller.render(document.model);
+    }
   }
 
-  public static async openForCommit(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState, rootPath: string, ref: GitRef, commit: CommitSummary): Promise<void> {
-    const panel = ReviewPanel.createOrReuse(context, commitService, reviewState);
-    panel.panel.title = `Review: ${commit.shortHash}`;
-    const details = await commitService.getCommitDetails(rootPath, commit.hash);
-    panel.render(buildReviewModel(rootPath, ref, [details], reviewState.getReviewedFiles(rootPath)));
-  }
-
-  private static createOrReuse(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState): ReviewPanel {
-    if (ReviewPanel.currentPanel) {
-      ReviewPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
-      return ReviewPanel.currentPanel;
+  private static createOrReuse(context: vscode.ExtensionContext, document: ReviewDocument): ReviewController {
+    if (ReviewController.currentController) {
+      ReviewController.currentController.panel.reveal(vscode.ViewColumn.One);
+      ReviewController.currentController.dispose();
     }
 
     const panel = vscode.window.createWebviewPanel("codeReview.reviewPanel", "Review", vscode.ViewColumn.One, {
@@ -44,14 +47,8 @@ export class ReviewPanel {
       localResourceRoots: [context.extensionUri]
     });
 
-    ReviewPanel.currentPanel = new ReviewPanel(panel, commitService, reviewState);
-    return ReviewPanel.currentPanel;
-  }
-
-  private async renderRef(rootPath: string, ref: GitRef): Promise<void> {
-    const commits = await this.commitService.listCommits(rootPath, ref.name, 100);
-    const details = await Promise.all(commits.map((commit) => this.commitService.getCommitDetails(rootPath, commit.hash)));
-    this.render(buildReviewModel(rootPath, ref, details, this.reviewState.getReviewedFiles(rootPath)));
+    ReviewController.currentController = new ReviewController(panel, document);
+    return ReviewController.currentController;
   }
 
   private render(model: ReviewModel): void {
@@ -60,13 +57,22 @@ export class ReviewPanel {
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
     if (message.command === "markFileReviewed") {
-      await this.reviewState.markFileReviewed(message.rootPath, message.hash, message.path);
+      await this.document.markFileReviewed(message.hash, message.path);
+      return;
+    }
+
+    if (message.command === "summarizeCommit") {
+      await this.document.summarizeCommit(message.hash);
+      return;
+    }
+
+    if (message.command === "analyzeFile") {
+      await this.document.analyzeFile(message.hash, message.path);
       return;
     }
 
     if (message.command === "reviewSelected") {
       vscode.window.showInformationMessage(`Creating review process for ${message.hashes?.length} selected commits...`);
-      // Future: integrate with codeReview.createReviewProcess
       return;
     }
 
@@ -81,7 +87,8 @@ export class ReviewPanel {
   }
 
   private dispose(): void {
-    ReviewPanel.currentPanel = undefined;
+    ReviewController.currentController = undefined;
+    this.document.dispose();
     while (this.disposables.length > 0) {
       this.disposables.pop()?.dispose();
     }
@@ -89,7 +96,7 @@ export class ReviewPanel {
 }
 
 type WebviewMessage = {
-  command: "openDiff" | "markFileReviewed" | "reviewSelected";
+  command: "openDiff" | "markFileReviewed" | "reviewSelected" | "summarizeCommit" | "analyzeFile";
   rootPath: string;
   hash: string;
   shortHash: string;
@@ -220,17 +227,51 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
     .commit.expanded .files {
       display: block;
     }
+    .ai-summary {
+      margin: 10px;
+      padding: 10px;
+      background: var(--vscode-textBlockQuote-background);
+      border-left: 3px solid var(--vscode-textBlockQuote-border);
+      font-style: italic;
+    }
+    .commit-actions {
+      padding: 0 10px 10px;
+      display: flex;
+      gap: 8px;
+    }
     .file {
       display: grid;
-      grid-template-columns: 44px 1fr 100px 80px 80px auto;
+      grid-template-columns: 44px 1fr 100px 80px 80px 240px;
       gap: 12px;
       align-items: center;
       padding: 7px 10px;
       border-top: 1px solid var(--border);
     }
+    .ai-suggestions {
+      grid-column: 2 / -1;
+      padding: 8px 10px;
+      background: var(--vscode-input-background);
+      border-radius: 4px;
+      margin-top: -4px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+    }
+    .ai-suggestions ul {
+      margin: 4px 0 0 0;
+      padding-left: 20px;
+    }
+    .ai-bug {
+      color: var(--vscode-errorForeground);
+      font-weight: bold;
+    }
     .file-actions {
       display: flex;
       gap: 8px;
+      justify-content: flex-end;
+    }
+    button {
+      min-width: 80px;
     }
     .file:first-child { border-top: 0; }
     .status {
@@ -429,6 +470,9 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
     function renderCommit(commit) {
       const checked = selected.has(commit.hash) ? "checked" : "";
       const files = visibleFiles(commit);
+      const summaryHtml = commit.aiSummary ? '<div class="ai-summary"><strong>AI Summary:</strong> ' + escapeHtml(commit.aiSummary) + '</div>' : "";
+      const summarizeButton = !commit.aiSummary ? '<button class="secondary" data-summarize="' + escapeAttr(commit.hash) + '">Summarize AI</button>' : "";
+      
       return '<article class="commit" id="commit-' + commit.hash + '">'
         + '<div class="commit-head" data-toggle="' + commit.hash + '">'
         + '<input type="checkbox" aria-label="Select commit ' + escapeAttr(commit.shortHash) + '" title="Select this commit for panel follow-up" data-select="' + escapeAttr(commit.hash) + '" ' + checked + '>'
@@ -437,7 +481,11 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
         + '<div class="meta"><span>' + escapeHtml(commit.shortHash) + '</span><span>' + escapeHtml(commit.authorName) + '</span><span>' + formatDate(commit.date) + '</span><span>' + escapeHtml(commit.hash) + '</span><span>' + escapeHtml(commit.reviewReason) + '</span></div></div>'
         + '<div class="stats"><span class="risk risk-' + escapeAttr(commit.risk) + '" title="' + escapeAttr(commit.reviewReason) + '">' + escapeHtml(commit.risk) + '</span><span title="Lines added and removed in this commit">+' + commit.additions + ' -' + commit.deletions + '</span></div>'
         + '</div>'
+        + '<div class="commit-details">'
+        + summaryHtml
+        + '<div class="commit-actions">' + summarizeButton + '</div>'
         + '<ul class="files">' + files.map((file) => renderFile(commit, file)).join("") + '</ul>'
+        + '</div>'
         + '</article>';
     }
 
@@ -453,6 +501,9 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
     }
 
     function renderFile(commit, file) {
+      const aiSection = renderAiFileAnalysis(file);
+      const analyzeButton = (!file.aiSuggestions && !file.aiBugs) ? '<button class="secondary" data-analyze="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '">AI Analyze</button>' : "";
+
       return '<li class="file">'
         + '<span class="status" title="File status: ' + escapeAttr(file.status) + '">' + escapeHtml(file.status) + '</span>'
         + '<span class="path" title="' + escapeAttr(fileTooltip(file)) + '">' + escapeHtml(file.path) + reviewedText(file) + '</span>'
@@ -460,10 +511,26 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
         + '<span class="risk risk-' + escapeAttr(file.risk) + '">' + escapeHtml(file.risk) + '</span>'
         + '<span class="stats"><span class="stats-add">+' + file.additions + '</span> <span class="stats-del">-' + file.deletions + '</span></span>'
         + '<div class="file-actions">'
+        + analyzeButton
         + '<button data-reviewed="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '" title="' + escapeAttr(file.reviewed ? "File already marked as reviewed" : "Mark this file as reviewed locally") + '" aria-label="' + escapeAttr(file.reviewed ? "File reviewed" : "Mark file as reviewed") + '" ' + (file.reviewed ? "disabled" : "") + '>' + (file.reviewed ? "Reviewed" : "Mark") + '</button>'
         + '<button data-diff="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '" data-previous-path="' + escapeAttr(file.previousPath || "") + '" title="Opens native VS Code diff for this file" aria-label="Open diff for ' + escapeAttr(file.path) + '">Diff</button>'
         + '</div>'
+        + aiSection
         + '</li>';
+    }
+
+    function renderAiFileAnalysis(file) {
+      if (!file.aiSuggestions && (!file.aiBugs || file.aiBugs.length === 0)) return "";
+      
+      let html = '<div class="ai-suggestions">';
+      if (file.aiBugs && file.aiBugs.length > 0) {
+        html += '<div class="ai-bug"><strong>Potential Bugs:</strong><ul>' + file.aiBugs.map(b => '<li>' + escapeHtml(b) + '</li>').join("") + '</ul></div>';
+      }
+      if (file.aiSuggestions && file.aiSuggestions.length > 0) {
+        html += '<strong>AI Suggestions:</strong><ul>' + file.aiSuggestions.map(s => '<li>' + escapeHtml(s) + '</li>').join("") + '</ul>';
+      }
+      html += '</div>';
+      return html;
     }
 
     elements.commits.addEventListener("change", (event) => {
@@ -482,33 +549,46 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
         return;
       }
 
+      const summarizeButton = event.target.closest("[data-summarize]");
+      if (summarizeButton) {
+        summarizeButton.disabled = true;
+        summarizeButton.textContent = "Summarizing...";
+        vscode.postMessage({
+          command: "summarizeCommit",
+          hash: summarizeButton.dataset.summarize
+        });
+        return;
+      }
+
+      const analyzeButton = event.target.closest("[data-analyze]");
+      if (analyzeButton) {
+        analyzeButton.disabled = true;
+        analyzeButton.textContent = "Analyzing...";
+        vscode.postMessage({
+          command: "analyzeFile",
+          hash: analyzeButton.dataset.analyze,
+          path: analyzeButton.dataset.path
+        });
+        return;
+      }
+
       const reviewedButton = event.target.closest("[data-reviewed]");
       if (reviewedButton) {
-        const commit = model.commits.find((item) => item.hash === reviewedButton.dataset.reviewed);
-        const file = commit?.files.find((item) => item.path === reviewedButton.dataset.path);
-        if (!commit || !file || file.reviewed) return;
-        file.reviewed = true;
-        model.totals.reviewedFiles += 1;
-        model.totals.unreviewedFiles -= 1;
         vscode.postMessage({
           command: "markFileReviewed",
-          rootPath: model.rootPath,
-          hash: commit.hash,
-          shortHash: commit.shortHash,
-          path: file.path
+          hash: reviewedButton.dataset.reviewed,
+          path: reviewedButton.dataset.path
         });
-        render();
         return;
       }
 
       const button = event.target.closest("[data-diff]");
       if (!button) return;
-      const commit = model.commits.find((item) => item.hash === button.dataset.diff);
       vscode.postMessage({
         command: "openDiff",
         rootPath: model.rootPath,
-        hash: commit.hash,
-        shortHash: commit.shortHash,
+        hash: button.dataset.diff,
+        shortHash: "Diff",
         path: button.dataset.path,
         previousPath: button.dataset.previousPath || undefined
       });
@@ -548,10 +628,6 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
   </script>
 </body>
 </html>`;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] ?? char));
 }
 
 function escapeJsonForScript(value: ReviewModel): string {

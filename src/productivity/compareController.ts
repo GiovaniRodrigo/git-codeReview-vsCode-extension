@@ -1,23 +1,54 @@
 import * as vscode from "vscode";
 import { createGitDocumentUri } from "../review/gitContentProvider";
 import { CompareModel } from "./compareModel";
+import { CompareDocument } from "./compareDocument";
 
-export class ComparePanel {
-  public static open(model: CompareModel): void {
-    const panel = vscode.window.createWebviewPanel("codeReview.comparePanel", `Compare: ${model.base}...${model.head}`, vscode.ViewColumn.One, {
-      enableScripts: true
-    });
-    panel.webview.html = renderHtml(panel.webview, model);
-    panel.webview.onDidReceiveMessage(async (message: CompareMessage) => {
-      if (message.command !== "openDiff") {
-        return;
-      }
+export class CompareController {
+  private readonly disposables: vscode.Disposable[] = [];
 
-      const leftPath = message.previousPath ?? message.path;
-      const left = createGitDocumentUri(message.rootPath, message.base, leftPath);
-      const right = createGitDocumentUri(message.rootPath, message.head, message.path);
-      await vscode.commands.executeCommand("vscode.diff", left, right, `${message.base}...${message.head}: ${message.path}`);
+  private constructor(
+    private readonly panel: vscode.WebviewPanel,
+    private readonly document: CompareDocument
+  ) {
+    this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
+    this.panel.webview.onDidReceiveMessage((message: CompareMessage) => this.handleMessage(message), undefined, this.disposables);
+    
+    this.document.onDidChange((model) => this.render(model), undefined, this.disposables);
+  }
+
+  public static async open(context: vscode.ExtensionContext, document: CompareDocument): Promise<void> {
+    const panel = vscode.window.createWebviewPanel("codeReview.comparePanel", `Compare: ${document.base}...${document.head}`, vscode.ViewColumn.One, {
+      enableScripts: true,
+      localResourceRoots: [context.extensionUri]
     });
+    
+    const controller = new CompareController(panel, document);
+    await document.load();
+    if (document.model) {
+      controller.render(document.model);
+    }
+  }
+
+  private render(model: CompareModel): void {
+    this.panel.webview.html = renderHtml(this.panel.webview, model);
+  }
+
+  private async handleMessage(message: CompareMessage): Promise<void> {
+    if (message.command !== "openDiff") {
+      return;
+    }
+
+    const leftPath = message.previousPath ?? message.path;
+    const left = createGitDocumentUri(message.rootPath, message.base, leftPath);
+    const right = createGitDocumentUri(message.rootPath, message.head, message.path);
+    await vscode.commands.executeCommand("vscode.diff", left, right, `${message.base}...${message.head}: ${message.path}`);
+  }
+
+  private dispose(): void {
+    this.document.dispose();
+    while (this.disposables.length > 0) {
+      this.disposables.pop()?.dispose();
+    }
   }
 }
 
