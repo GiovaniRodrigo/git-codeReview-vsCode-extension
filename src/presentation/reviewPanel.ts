@@ -226,6 +226,23 @@ export class ReviewPanel {
       await this.service.refreshMergeDecision(message.payload.id);
       await this.postState();
     }
+
+    if (message.type === 'exportLocalDatabase') {
+      const data = await this.service.exportLocalDatabase();
+      const document = await vscode.workspace.openTextDocument({ content: data, language: 'json' });
+      await vscode.window.showTextDocument(document, { preview: false });
+      this.post({ type: 'operationCompleted', payload: { message: 'Banco local exportado.' } });
+    }
+
+    if (message.type === 'createBackup') {
+      const backupPath = await this.service.createBackup();
+      this.post({ type: 'operationCompleted', payload: { message: `Backup criado em: ${backupPath}` } });
+    }
+
+    if (message.type === 'syncRemote') {
+      const syncedPath = await this.service.syncRemote();
+      this.post({ type: 'operationCompleted', payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
+    }
   }
 
   private async postState(): Promise<void> {

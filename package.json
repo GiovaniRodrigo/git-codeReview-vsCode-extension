@@ -15,7 +15,11 @@
     "onCommand:codeReview.openDashboard",
     "onCommand:codeReview.startReview",
     "onCommand:codeReview.openPullRequest",
-    "onView:codeReview.sidebar"
+    "onView:codeReview.sidebar",
+    "onCommand:codeReview.exportAuditLog",
+    "onCommand:codeReview.exportLocalDatabase",
+    "onCommand:codeReview.createBackup",
+    "onCommand:codeReview.syncRemote"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -31,6 +35,22 @@
       {
         "command": "codeReview.openPullRequest",
         "title": "Code Review: Abrir Pull Request"
+      },
+      {
+        "command": "codeReview.exportAuditLog",
+        "title": "Code Review: Exportar Auditoria"
+      },
+      {
+        "command": "codeReview.exportLocalDatabase",
+        "title": "Code Review: Exportar Banco Local"
+      },
+      {
+        "command": "codeReview.createBackup",
+        "title": "Code Review: Criar Backup"
+      },
+      {
+        "command": "codeReview.syncRemote",
+        "title": "Code Review: Sincronizar Remoto"
       }
     ],
     "viewsContainers": {
@@ -60,8 +80,38 @@
         "command": "codeReview.startReview",
         "key": "ctrl+alt+shift+r",
         "mac": "cmd+alt+shift+r"
+      },
+      {
+        "command": "codeReview.exportAuditLog",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e"
+      },
+      {
+        "command": "codeReview.exportLocalDatabase",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d"
+      },
+      {
+        "command": "codeReview.createBackup",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b"
+      },
+      {
+        "command": "codeReview.syncRemote",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Code Review",
+      "properties": {
+        "codeReview.remoteSyncPath": {
+          "type": "string",
+          "default": "",
+          "description": "Caminho opcional para sincronizacao remota simulada da base local de code review."
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "npm run install:webview && npm run build:webview && npm run build:extension",

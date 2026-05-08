@@ -26,6 +26,8 @@ import {
   updateMergeDecision
 } from '../domain/reviewSession';
 import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
+import { LocalTtlCache } from '../infrastructure/performanceCache';
+import { listIntegrationDescriptors, IntegrationDescriptor } from '../infrastructure/integrationAdapters';
 import { AssistedIntelligenceReport, buildAssistedIntelligenceReport } from './assistedIntelligence';
 
 export interface ReviewSessionRepository {
@@ -33,6 +35,9 @@ export interface ReviewSessionRepository {
   getById(id: string): Promise<ReviewSession | undefined>;
   saveCurrent(session: ReviewSession): Promise<void>;
   list(): Promise<ReviewSession[]>;
+  exportDatabase?(): Promise<string>;
+  createBackup?(): Promise<string>;
+  syncToRemote?(targetPath?: string): Promise<string>;
 }
 
 export interface GitService {
@@ -43,27 +48,65 @@ export interface SourceFileProvider {
   readFiles(paths: string[]): Promise<SourceFile[]>;
 }
 
+export interface AuditService {
+  registerSessionSnapshot(session: ReviewSession): Promise<void>;
+  exportData(): Promise<string>;
+}
+
+export interface PerformanceState {
+  cacheEnabled: boolean;
+  lazySessionLimit: number;
+  incrementalBatchSize: number;
+  asyncProcessingEnabled: boolean;
+}
+
+export interface DashboardState {
+  currentSession?: ReviewSession;
+  git: GitContext;
+  sessions: ReviewSession[];
+  metrics: ReviewMetrics;
+  intelligence: AssistedIntelligenceReport;
+  performance: PerformanceState;
+  integrations: IntegrationDescriptor[];
+}
+
 export class ReviewSessionService {
+  private readonly dashboardCache = new LocalTtlCache<DashboardState>(1500);
+
   constructor(
     private readonly repository: ReviewSessionRepository,
     private readonly gitService: GitService,
-    private readonly sourceFileProvider?: SourceFileProvider
+    private readonly sourceFileProvider?: SourceFileProvider,
+    private readonly auditService?: AuditService
   ) {}
 
-  async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[]; metrics: ReviewMetrics; intelligence: AssistedIntelligenceReport }> {
+  async getDashboardState(): Promise<DashboardState> {
+    const cached = this.dashboardCache.get('dashboard');
+    if (cached) return cached;
+
     const [currentSession, git, sessions] = await Promise.all([
       this.repository.getCurrent(),
       this.gitService.getContext(),
       this.repository.list()
     ]);
-
-    return {
+    const visibleSessions = sessions.slice(0, 50);
+    const state: DashboardState = {
       currentSession,
       git,
-      sessions,
+      sessions: visibleSessions,
       metrics: calculateReviewMetrics(sessions),
-      intelligence: buildAssistedIntelligenceReport(currentSession, sessions)
+      intelligence: buildAssistedIntelligenceReport(currentSession, sessions),
+      performance: {
+        cacheEnabled: true,
+        lazySessionLimit: 50,
+        incrementalBatchSize: 25,
+        asyncProcessingEnabled: true
+      },
+      integrations: listIntegrationDescriptors()
     };
+
+    this.dashboardCache.set('dashboard', state);
+    return state;
   }
 
   async startReview(author: string, reviewer: string): Promise<ReviewSession> {
@@ -73,7 +116,7 @@ export class ReviewSessionService {
       ? updateReviewSessionGitContext(existing, git)
       : createReviewSession({ git, author, reviewer });
 
-    await this.repository.saveCurrent(session);
+    await this.saveAndAudit(session);
     return session;
   }
 
@@ -84,7 +127,7 @@ export class ReviewSessionService {
       throw new Error(`Review session nao encontrada: ${id}`);
     }
 
-    await this.repository.saveCurrent(session);
+    await this.saveAndAudit(session);
     return session;
   }
 
@@ -96,14 +139,14 @@ export class ReviewSessionService {
     }
 
     const updated = updateReviewSessionStatus(session, status);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
   async navigate(id: string, target: ReviewNavigationTarget): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = navigateReviewSession(session, target);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -113,14 +156,14 @@ export class ReviewSessionService {
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = addReviewComment(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
   async editComment(id: string, commentId: string, body: string, editor: string): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = editReviewComment(session, commentId, body, editor);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -138,7 +181,7 @@ export class ReviewSessionService {
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = createValidationFinding(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -150,7 +193,7 @@ export class ReviewSessionService {
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = updateValidationFindingStatus(session, findingId, status, reason);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -161,7 +204,7 @@ export class ReviewSessionService {
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = registerCorrectionAttempt(session, findingId, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -172,7 +215,7 @@ export class ReviewSessionService {
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = revalidateFinding(session, findingId, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
@@ -192,29 +235,56 @@ export class ReviewSessionService {
       responsible: current.author
     }), session);
 
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return { session: updated, findings };
   }
 
   async addCollaborationMessage(id: string, input: { author: string; body: string; threadId?: string }): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = addCollaborationMessage(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
   async approvePartial(id: string, input: { scope: PartialApprovalScope; target: string; reviewer: string }): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = registerPartialApproval(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
 
   async refreshMergeDecision(id: string): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = updateMergeDecision(session);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
+  }
+
+
+  async exportLocalDatabase(): Promise<string> {
+    return this.repository.exportDatabase?.() ?? JSON.stringify({ sessions: await this.repository.list() }, null, 2);
+  }
+
+  async createBackup(): Promise<string> {
+    const result = await this.repository.createBackup?.();
+    if (!result) throw new Error('Repositorio atual nao oferece backup local.');
+    return result;
+  }
+
+  async syncRemote(targetPath?: string): Promise<string> {
+    const result = await this.repository.syncToRemote?.(targetPath);
+    if (!result) throw new Error('Repositorio atual nao oferece sincronizacao remota.');
+    return result;
+  }
+
+  private async saveAndAudit(session: ReviewSession): Promise<void> {
+    await this.repository.saveCurrent(session);
+    this.dashboardCache.clear();
+    await this.auditService?.registerSessionSnapshot(session);
+  }
+
+  async exportAuditData(): Promise<string> {
+    return this.auditService?.exportData() ?? "";
   }
 
   private async getExistingSession(id: string): Promise<ReviewSession> {

@@ -34,7 +34,7 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode2 = __toESM(require("vscode"));
+var vscode3 = __toESM(require("vscode"));
 
 // src/domain/architectureRules.ts
 function analyzeArchitectureRules(files) {
@@ -68,12 +68,12 @@ function solidRules(file) {
 }
 function cleanArchitectureRules(file) {
   const findings = [];
-  const path2 = normalizePath(file.path);
+  const path4 = normalizePath(file.path);
   const imports = extractImports(file.content);
-  if (/src\/domain\//.test(path2) && imports.some((item) => /application|infrastructure|presentation|telemetry|vscode|react/.test(item))) {
+  if (/src\/domain\//.test(path4) && imports.some((item) => /application|infrastructure|presentation|telemetry|vscode|react/.test(item))) {
     findings.push(finding(file, "Depend\xEAncia incorreta", "Clean Architecture", "CRITICAL", "Dominio deve permanecer independente das demais camadas.", lineOf(file.content, /import\s+/)));
   }
-  if (/src\/application\//.test(path2) && imports.some((item) => /infrastructure|presentation|vscode|react/.test(item))) {
+  if (/src\/application\//.test(path4) && imports.some((item) => /infrastructure|presentation|vscode|react/.test(item))) {
     findings.push(finding(file, "Viola\xE7\xE3o de camadas", "Clean Architecture", "HIGH", "Aplicacao deve orquestrar contratos sem depender de infraestrutura ou UI.", lineOf(file.content, /import\s+/)));
   }
   if (imports.length > 12) {
@@ -83,8 +83,8 @@ function cleanArchitectureRules(file) {
 }
 function dddRules(file) {
   const findings = [];
-  const path2 = normalizePath(file.path);
-  if (/src\/domain\//.test(path2) && /(user|order|payment|review|validation).*(user|order|payment|review|validation)/i.test(file.content)) {
+  const path4 = normalizePath(file.path);
+  if (/src\/domain\//.test(path4) && /(user|order|payment|review|validation).*(user|order|payment|review|validation)/i.test(file.content)) {
     findings.push(finding(file, "Bounded Context", "DDD", "MEDIUM", "Arquivo de dominio mistura termos de contextos distintos.", 1));
   }
   if (/(class|interface)\s+\w*Entity\b/.test(file.content) && !/\bid\b/.test(file.content)) {
@@ -93,7 +93,7 @@ function dddRules(file) {
   if (/(class|interface)\s+\w*ValueObject\b/.test(file.content) && /\b(set|update|mutate)\w*\s*\(/.test(file.content)) {
     findings.push(finding(file, "Value Objects", "DDD", "MEDIUM", "Value Object deve preservar imutabilidade sem mutadores.", lineOf(file.content, /\b(set|update|mutate)\w*\s*\(/)));
   }
-  if (/src\/domain\/.*service/i.test(path2) && /(vscode|fetch\(|axios|infrastructure)/.test(file.content)) {
+  if (/src\/domain\/.*service/i.test(path4) && /(vscode|fetch\(|axios|infrastructure)/.test(file.content)) {
     findings.push(finding(file, "Servi\xE7os de dom\xEDnio", "DDD", "HIGH", "Servico de dominio nao deve coordenar infraestrutura ou I/O externo.", lineOf(file.content, /(vscode|fetch\(|axios|infrastructure)/)));
   }
   return findings;
@@ -132,8 +132,8 @@ function resolveImportPath(fromPath, importPath) {
   const resolved = parts.join("/");
   return /\.(ts|tsx|js|jsx)$/.test(resolved) ? resolved : `${resolved}.ts`;
 }
-function normalizePath(path2) {
-  return path2.replaceAll("\\", "/");
+function normalizePath(path4) {
+  return path4.replaceAll("\\", "/");
 }
 function countMatches(content, pattern) {
   return Array.from(content.matchAll(pattern)).length;
@@ -641,6 +641,43 @@ function round(value) {
   return Math.round(value * 10) / 10;
 }
 
+// src/infrastructure/performanceCache.ts
+var LocalTtlCache = class {
+  constructor(ttlMs = 3e3) {
+    this.ttlMs = ttlMs;
+    this.values = /* @__PURE__ */ new Map();
+  }
+  get(key) {
+    const entry = this.values.get(key);
+    if (!entry) return void 0;
+    if (Date.now() - entry.createdAt > this.ttlMs) {
+      this.values.delete(key);
+      return void 0;
+    }
+    return entry.value;
+  }
+  set(key, value) {
+    this.values.set(key, { value, createdAt: Date.now() });
+  }
+  clear() {
+    this.values.clear();
+  }
+};
+
+// src/infrastructure/integrationAdapters.ts
+function listIntegrationDescriptors() {
+  return [
+    { id: "github", name: "GitHub", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para mapear PRs, commits e checks." },
+    { id: "gitlab", name: "GitLab", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para merge requests e pipelines." },
+    { id: "azure-devops", name: "Azure DevOps", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para pull requests e boards." },
+    { id: "bitbucket", name: "Bitbucket", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para pull requests e branches." },
+    { id: "jira", name: "Jira", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para vincular findings a issues." },
+    { id: "linear", name: "Linear", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para rastrear corre\xE7\xF5es por ticket." },
+    { id: "slack", name: "Slack", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para notificar men\xE7\xF5es e bloqueios." },
+    { id: "discord", name: "Discord", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para alertas de review em canais." }
+  ];
+}
+
 // src/application/assistedIntelligence.ts
 function buildAssistedIntelligenceReport(currentSession, sessions) {
   const findings = currentSession?.findings ?? [];
@@ -764,30 +801,44 @@ function buildRecommendations(findings, recurringErrors, patterns) {
 
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
-  constructor(repository, gitService, sourceFileProvider) {
+  constructor(repository, gitService, sourceFileProvider, auditService) {
     this.repository = repository;
     this.gitService = gitService;
     this.sourceFileProvider = sourceFileProvider;
+    this.auditService = auditService;
+    this.dashboardCache = new LocalTtlCache(1500);
   }
   async getDashboardState() {
+    const cached = this.dashboardCache.get("dashboard");
+    if (cached) return cached;
     const [currentSession, git2, sessions] = await Promise.all([
       this.repository.getCurrent(),
       this.gitService.getContext(),
       this.repository.list()
     ]);
-    return {
+    const visibleSessions = sessions.slice(0, 50);
+    const state = {
       currentSession,
       git: git2,
-      sessions,
+      sessions: visibleSessions,
       metrics: calculateReviewMetrics(sessions),
-      intelligence: buildAssistedIntelligenceReport(currentSession, sessions)
+      intelligence: buildAssistedIntelligenceReport(currentSession, sessions),
+      performance: {
+        cacheEnabled: true,
+        lazySessionLimit: 50,
+        incrementalBatchSize: 25,
+        asyncProcessingEnabled: true
+      },
+      integrations: listIntegrationDescriptors()
     };
+    this.dashboardCache.set("dashboard", state);
+    return state;
   }
   async startReview(author, reviewer) {
     const git2 = await this.gitService.getContext();
     const existing = await this.repository.getCurrent();
     const session = existing ? updateReviewSessionGitContext(existing, git2) : createReviewSession({ git: git2, author, reviewer });
-    await this.repository.saveCurrent(session);
+    await this.saveAndAudit(session);
     return session;
   }
   async openReview(id) {
@@ -795,7 +846,7 @@ var ReviewSessionService = class {
     if (!session) {
       throw new Error(`Review session nao encontrada: ${id}`);
     }
-    await this.repository.saveCurrent(session);
+    await this.saveAndAudit(session);
     return session;
   }
   async updateStatus(id, status) {
@@ -804,49 +855,49 @@ var ReviewSessionService = class {
       throw new Error(`Review session nao encontrada: ${id}`);
     }
     const updated = updateReviewSessionStatus(session, status);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async navigate(id, target) {
     const session = await this.getExistingSession(id);
     const updated = navigateReviewSession(session, target);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async addComment(id, input) {
     const session = await this.getExistingSession(id);
     const updated = addReviewComment(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async editComment(id, commentId, body, editor) {
     const session = await this.getExistingSession(id);
     const updated = editReviewComment(session, commentId, body, editor);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async createFinding(id, input) {
     const session = await this.getExistingSession(id);
     const updated = createValidationFinding(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async updateFindingStatus(id, findingId, status, reason) {
     const session = await this.getExistingSession(id);
     const updated = updateValidationFindingStatus(session, findingId, status, reason);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async registerCorrection(id, findingId, input) {
     const session = await this.getExistingSession(id);
     const updated = registerCorrectionAttempt(session, findingId, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async revalidate(id, findingId, input) {
     const session = await this.getExistingSession(id);
     const updated = revalidateFinding(session, findingId, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async runArchitectureValidation(id) {
@@ -863,26 +914,47 @@ var ReviewSessionService = class {
       commit,
       responsible: current.author
     }), session);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return { session: updated, findings };
   }
   async addCollaborationMessage(id, input) {
     const session = await this.getExistingSession(id);
     const updated = addCollaborationMessage(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async approvePartial(id, input) {
     const session = await this.getExistingSession(id);
     const updated = registerPartialApproval(session, input);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
   }
   async refreshMergeDecision(id) {
     const session = await this.getExistingSession(id);
     const updated = updateMergeDecision(session);
-    await this.repository.saveCurrent(updated);
+    await this.saveAndAudit(updated);
     return updated;
+  }
+  async exportLocalDatabase() {
+    return this.repository.exportDatabase?.() ?? JSON.stringify({ sessions: await this.repository.list() }, null, 2);
+  }
+  async createBackup() {
+    const result = await this.repository.createBackup?.();
+    if (!result) throw new Error("Repositorio atual nao oferece backup local.");
+    return result;
+  }
+  async syncRemote(targetPath) {
+    const result = await this.repository.syncToRemote?.(targetPath);
+    if (!result) throw new Error("Repositorio atual nao oferece sincronizacao remota.");
+    return result;
+  }
+  async saveAndAudit(session) {
+    await this.repository.saveCurrent(session);
+    this.dashboardCache.clear();
+    await this.auditService?.registerSessionSnapshot(session);
+  }
+  async exportAuditData() {
+    return this.auditService?.exportData() ?? "";
   }
   async getExistingSession(id) {
     const session = await this.repository.getById(id);
@@ -953,34 +1025,103 @@ function emptyGitContext(currentBranch) {
   };
 }
 
-// src/infrastructure/vscodeReviewSessionRepository.ts
-var CURRENT_SESSION_KEY = "codeReview.currentSession";
-var SESSIONS_KEY = "codeReview.sessions";
-var VscodeReviewSessionRepository = class {
+// src/infrastructure/localJsonReviewSessionRepository.ts
+var fs = __toESM(require("node:fs/promises"));
+var path = __toESM(require("node:path"));
+var vscode = __toESM(require("vscode"));
+var DATABASE_FILE = "code-review.localdb.json";
+var BACKUP_DIR = "backups";
+var LEGACY_CURRENT_SESSION_KEY = "codeReview.currentSession";
+var LEGACY_SESSIONS_KEY = "codeReview.sessions";
+var LocalJsonReviewSessionRepository = class {
   constructor(context) {
     this.context = context;
+    this.databasePath = path.join(context.globalStorageUri.fsPath, DATABASE_FILE);
+    this.backupPath = path.join(context.globalStorageUri.fsPath, BACKUP_DIR);
   }
   async getCurrent() {
-    return this.context.workspaceState.get(CURRENT_SESSION_KEY);
+    const database = await this.readDatabase();
+    return database.sessions.find((session) => session.id === database.currentSessionId);
   }
   async list() {
-    return this.context.workspaceState.get(SESSIONS_KEY, []);
+    const database = await this.readDatabase();
+    return database.sessions;
   }
   async getById(id) {
-    const sessions = await this.list();
-    return sessions.find((session) => session.id === id);
+    const database = await this.readDatabase();
+    return database.sessions.find((session) => session.id === id);
   }
   async saveCurrent(session) {
-    const sessions = await this.list();
-    const nextSessions = [session, ...sessions.filter((item) => item.id !== session.id)];
-    await this.context.workspaceState.update(CURRENT_SESSION_KEY, session);
-    await this.context.workspaceState.update(SESSIONS_KEY, nextSessions);
+    const database = await this.readDatabase();
+    const sessions = [session, ...database.sessions.filter((item) => item.id !== session.id)];
+    await this.writeDatabase({
+      version: 1,
+      currentSessionId: session.id,
+      sessions,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  async exportDatabase() {
+    const database = await this.readDatabase();
+    return JSON.stringify(database, null, 2);
+  }
+  async createBackup() {
+    const database = await this.readDatabase();
+    await fs.mkdir(this.backupPath, { recursive: true });
+    const fileName = `code-review-backup-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`;
+    const filePath = path.join(this.backupPath, fileName);
+    await fs.writeFile(filePath, JSON.stringify(database, null, 2), "utf8");
+    return filePath;
+  }
+  async syncToRemote(targetPath) {
+    const database = await this.readDatabase();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const configuredPath = vscode.workspace.getConfiguration("codeReview").get("remoteSyncPath");
+    const destination = targetPath || configuredPath || (workspaceFolder ? path.join(workspaceFolder, ".code-review-sync.json") : void 0);
+    if (!destination) {
+      throw new Error("Nao foi possivel determinar o destino da sincronizacao remota. Configure codeReview.remoteSyncPath ou abra um workspace.");
+    }
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    await fs.writeFile(destination, JSON.stringify({ syncedAt: (/* @__PURE__ */ new Date()).toISOString(), database }, null, 2), "utf8");
+    return destination;
+  }
+  async readDatabase() {
+    await fs.mkdir(path.dirname(this.databasePath), { recursive: true });
+    try {
+      const raw = await fs.readFile(this.databasePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return {
+        version: 1,
+        currentSessionId: parsed.currentSessionId,
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+        updatedAt: parsed.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+      };
+    } catch {
+      const migrated = this.readLegacyState();
+      await this.writeDatabase(migrated);
+      return migrated;
+    }
+  }
+  readLegacyState() {
+    const currentSession = this.context.workspaceState.get(LEGACY_CURRENT_SESSION_KEY);
+    const legacySessions = this.context.workspaceState.get(LEGACY_SESSIONS_KEY, []);
+    const sessions = currentSession ? [currentSession, ...legacySessions.filter((session) => session.id !== currentSession.id)] : legacySessions;
+    return {
+      version: 1,
+      currentSessionId: currentSession?.id ?? sessions[0]?.id,
+      sessions,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  async writeDatabase(database) {
+    await fs.mkdir(path.dirname(this.databasePath), { recursive: true });
+    await fs.writeFile(this.databasePath, JSON.stringify(database, null, 2), "utf8");
   }
 };
 
 // src/infrastructure/workspaceSourceFileProvider.ts
 var import_node_fs = require("node:fs");
-var path = __toESM(require("node:path"));
+var path2 = __toESM(require("node:path"));
 var SUPPORTED_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx"]);
 var WorkspaceSourceFileProvider = class {
   constructor(workspaceFolder) {
@@ -988,13 +1129,13 @@ var WorkspaceSourceFileProvider = class {
   }
   async readFiles(paths) {
     if (!this.workspaceFolder) return [];
-    const limitedPaths = paths.filter((filePath) => SUPPORTED_EXTENSIONS.has(path.extname(filePath))).slice(0, 80);
+    const limitedPaths = paths.filter((filePath) => SUPPORTED_EXTENSIONS.has(path2.extname(filePath))).slice(0, 80);
     const files = await Promise.all(limitedPaths.map((filePath) => this.readFile(filePath)));
     return files.filter((file) => Boolean(file));
   }
   async readFile(filePath) {
     try {
-      const absolutePath = path.join(this.workspaceFolder.uri.fsPath, filePath);
+      const absolutePath = path2.join(this.workspaceFolder.uri.fsPath, filePath);
       const content = await import_node_fs.promises.readFile(absolutePath, "utf8");
       return { path: filePath, content };
     } catch {
@@ -1004,7 +1145,7 @@ var WorkspaceSourceFileProvider = class {
 };
 
 // src/presentation/reviewPanel.ts
-var vscode = __toESM(require("vscode"));
+var vscode2 = __toESM(require("vscode"));
 var ReviewPanel = class {
   constructor(context, service) {
     this.context = context;
@@ -1012,18 +1153,18 @@ var ReviewPanel = class {
   }
   open(view) {
     if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.One);
+      this.panel.reveal(vscode2.ViewColumn.One);
       this.postState();
       return;
     }
-    this.panel = vscode.window.createWebviewPanel(
+    this.panel = vscode2.window.createWebviewPanel(
       "codeReviewDashboard",
       view === "dashboard" ? "Code Review Dashboard" : "Review Analysis",
-      vscode.ViewColumn.One,
+      vscode2.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist")]
+        localResourceRoots: [vscode2.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist")]
       }
     );
     this.panel.onDidDispose(() => {
@@ -1038,10 +1179,10 @@ var ReviewPanel = class {
       this.open("analysis");
     }
     const author = await getGitUserName();
-    const reviewer = vscode.env.machineId;
+    const reviewer = vscode2.env.machineId;
     const session = await this.service.startReview(author, reviewer);
     this.post({ type: "reviewSessionStarted", payload: session });
-    vscode.window.showInformationMessage("Review session iniciada.");
+    vscode2.window.showInformationMessage("Review session iniciada.");
   }
   async handleMessage(message) {
     if (message.type === "requestState") {
@@ -1070,7 +1211,7 @@ var ReviewPanel = class {
     if (message.type === "addReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.body === "string" && typeof message.payload.file === "string" && typeof message.payload.line === "number") {
       await this.service.addComment(message.payload.id, {
         body: message.payload.body,
-        author: vscode.env.machineId,
+        author: vscode2.env.machineId,
         file: message.payload.file,
         line: message.payload.line,
         commit: typeof message.payload.commit === "string" ? message.payload.commit : void 0,
@@ -1079,7 +1220,7 @@ var ReviewPanel = class {
       await this.postState();
     }
     if (message.type === "editReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.body === "string") {
-      await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode.env.machineId);
+      await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode2.env.machineId);
       await this.postState();
     }
     if (message.type === "createValidationFinding" && typeof message.payload?.id === "string" && typeof message.payload.rule === "string" && typeof message.payload.severity === "string" && isValidationSeverity(message.payload.severity) && typeof message.payload.description === "string" && typeof message.payload.file === "string" && typeof message.payload.line === "number" && typeof message.payload.commit === "string") {
@@ -1090,7 +1231,7 @@ var ReviewPanel = class {
         file: message.payload.file,
         line: message.payload.line,
         commit: message.payload.commit,
-        responsible: vscode.env.machineId
+        responsible: vscode2.env.machineId
       });
       await this.postState();
     }
@@ -1100,7 +1241,7 @@ var ReviewPanel = class {
     }
     if (message.type === "registerCorrectionAttempt" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.commit === "string" && typeof message.payload.description === "string") {
       await this.service.registerCorrection(message.payload.id, message.payload.findingId, {
-        author: vscode.env.machineId,
+        author: vscode2.env.machineId,
         commit: message.payload.commit,
         description: message.payload.description
       });
@@ -1108,7 +1249,7 @@ var ReviewPanel = class {
     }
     if (message.type === "revalidateFinding" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.result === "string" && isValidationFindingStatus(message.payload.result) && typeof message.payload.notes === "string") {
       await this.service.revalidate(message.payload.id, message.payload.findingId, {
-        reviewer: vscode.env.machineId,
+        reviewer: vscode2.env.machineId,
         result: message.payload.result,
         notes: message.payload.notes
       });
@@ -1121,7 +1262,7 @@ var ReviewPanel = class {
     }
     if (message.type === "addCollaborationMessage" && typeof message.payload?.id === "string" && typeof message.payload.body === "string") {
       await this.service.addCollaborationMessage(message.payload.id, {
-        author: vscode.env.machineId,
+        author: vscode2.env.machineId,
         body: message.payload.body,
         threadId: typeof message.payload.threadId === "string" ? message.payload.threadId : void 0
       });
@@ -1131,13 +1272,27 @@ var ReviewPanel = class {
       await this.service.approvePartial(message.payload.id, {
         scope: message.payload.scope,
         target: message.payload.target,
-        reviewer: vscode.env.machineId
+        reviewer: vscode2.env.machineId
       });
       await this.postState();
     }
     if (message.type === "refreshMergeDecision" && typeof message.payload?.id === "string") {
       await this.service.refreshMergeDecision(message.payload.id);
       await this.postState();
+    }
+    if (message.type === "exportLocalDatabase") {
+      const data = await this.service.exportLocalDatabase();
+      const document = await vscode2.workspace.openTextDocument({ content: data, language: "json" });
+      await vscode2.window.showTextDocument(document, { preview: false });
+      this.post({ type: "operationCompleted", payload: { message: "Banco local exportado." } });
+    }
+    if (message.type === "createBackup") {
+      const backupPath = await this.service.createBackup();
+      this.post({ type: "operationCompleted", payload: { message: `Backup criado em: ${backupPath}` } });
+    }
+    if (message.type === "syncRemote") {
+      const syncedPath = await this.service.syncRemote();
+      this.post({ type: "operationCompleted", payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
     }
   }
   async postState() {
@@ -1152,9 +1307,9 @@ function isNavigationKind(value) {
   return value === "commit" || value === "diff" || value === "file" || value === "comment" || value === "validation";
 }
 function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
-  const distUri = vscode.Uri.joinPath(extensionUri, "webview-ui", "dist");
-  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "assets", "index.js"));
-  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "assets", "index.css"));
+  const distUri = vscode2.Uri.joinPath(extensionUri, "webview-ui", "dist");
+  const scriptUri = webview.asWebviewUri(vscode2.Uri.joinPath(distUri, "assets", "index.js"));
+  const styleUri = webview.asWebviewUri(vscode2.Uri.joinPath(distUri, "assets", "index.css"));
   const nonce = getNonce();
   return (
     /* html */
@@ -1175,8 +1330,8 @@ function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
   );
 }
 async function getGitUserName() {
-  const config = vscode.workspace.getConfiguration("git");
-  return config.get("user.name") ?? vscode.env.machineId;
+  const config = vscode2.workspace.getConfiguration("git");
+  return config.get("user.name") ?? vscode2.env.machineId;
 }
 function getNonce() {
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -1215,21 +1370,99 @@ function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
 
+// src/infrastructure/audit/fileAuditService.ts
+var crypto = __toESM(require("node:crypto"));
+var fs3 = __toESM(require("node:fs/promises"));
+var path3 = __toESM(require("node:path"));
+var FileAuditService = class {
+  constructor(context) {
+    this.context = context;
+    this.auditFilePath = path3.join(context.globalStorageUri.fsPath, "audit-log.ndjson");
+  }
+  async registerSessionSnapshot(session) {
+    await fs3.mkdir(path3.dirname(this.auditFilePath), { recursive: true });
+    const latestHistory = session.history.at(-1);
+    const previousHash = await this.getLastHash();
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const payloadHash = sha256(JSON.stringify(session));
+    const unsignedEntry = {
+      id: `${session.id}-${Date.now()}`,
+      action: latestHistory?.type ?? "SESSION_UPDATED",
+      sessionId: session.id,
+      actor: session.reviewer,
+      timestamp,
+      previousHash,
+      payloadHash
+    };
+    const entry = {
+      ...unsignedEntry,
+      immutableHash: sha256(JSON.stringify(unsignedEntry))
+    };
+    await fs3.appendFile(this.auditFilePath, `${JSON.stringify(entry)}
+`, "utf8");
+  }
+  async exportData() {
+    try {
+      return await fs3.readFile(this.auditFilePath, "utf8");
+    } catch {
+      return "";
+    }
+  }
+  async getLastHash() {
+    try {
+      const raw = await fs3.readFile(this.auditFilePath, "utf8");
+      const lastLine = raw.split(/\r?\n/).filter(Boolean).at(-1);
+      if (!lastLine) return "GENESIS";
+      const entry = JSON.parse(lastLine);
+      return entry.immutableHash || "GENESIS";
+    } catch {
+      return "GENESIS";
+    }
+  }
+};
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
 // src/extension.ts
 function activate(context) {
-  const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
-  const repository = new VscodeReviewSessionRepository(context);
+  const workspaceFolder = vscode3.workspace.workspaceFolders?.[0];
+  const repository = new LocalJsonReviewSessionRepository(context);
   const gitService = new GitCliService(workspaceFolder);
   const sourceFileProvider = new WorkspaceSourceFileProvider(workspaceFolder);
-  const reviewSessionService = new ReviewSessionService(repository, gitService, sourceFileProvider);
+  const auditService = new FileAuditService(context);
+  const reviewSessionService = new ReviewSessionService(repository, gitService, sourceFileProvider, auditService);
   const reviewPanel = new ReviewPanel(context, reviewSessionService);
   context.subscriptions.push(
-    vscode2.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),
-    vscode2.commands.registerCommand("codeReview.openDashboard", () => reviewPanel.open("dashboard")),
-    vscode2.commands.registerCommand("codeReview.startReview", () => reviewPanel.startReview()),
-    vscode2.commands.registerCommand("codeReview.openPullRequest", () => reviewPanel.open("dashboard"))
+    vscode3.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),
+    vscode3.commands.registerCommand("codeReview.openDashboard", () => reviewPanel.open("dashboard")),
+    vscode3.commands.registerCommand("codeReview.startReview", () => reviewPanel.startReview()),
+    vscode3.commands.registerCommand("codeReview.openPullRequest", () => reviewPanel.open("dashboard")),
+    vscode3.commands.registerCommand("codeReview.exportAuditLog", async () => {
+      const data = await reviewSessionService.exportAuditData();
+      await openJsonDocument(data || "Nenhum registro de auditoria encontrado.");
+    }),
+    vscode3.commands.registerCommand("codeReview.exportLocalDatabase", async () => {
+      const data = await reviewSessionService.exportLocalDatabase();
+      await openJsonDocument(data);
+    }),
+    vscode3.commands.registerCommand("codeReview.createBackup", async () => {
+      const backupPath = await reviewSessionService.createBackup();
+      vscode3.window.showInformationMessage(`Backup de Code Review criado em: ${backupPath}`);
+    }),
+    vscode3.commands.registerCommand("codeReview.syncRemote", async () => {
+      const syncedPath = await reviewSessionService.syncRemote();
+      vscode3.window.showInformationMessage(`Sincronizacao de Code Review concluida em: ${syncedPath}`);
+    })
   );
   reviewPanel.open("dashboard");
+}
+async function openJsonDocument(content) {
+  const document = await vscode3.workspace.openTextDocument({
+    content,
+    language: "json"
+  });
+  await vscode3.window.showTextDocument(document, { preview: false });
 }
 function deactivate() {
 }

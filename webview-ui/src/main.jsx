@@ -112,7 +112,7 @@ function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'intelligence') return <IntelligenceCenter state={state} />;
   if (view === 'collaboration') return <CollaborationCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
-  if (view === 'settings') return <SettingsCenter />;
+  if (view === 'settings') return <SettingsCenter state={state} />;
   if (view === 'conformities') return <ConformitiesCenter />;
 
   return (
@@ -876,9 +876,51 @@ function CommentsCenter({ state }) {
     </main>
   );
 }
-function SettingsCenter() {
-  return <SimpleCenter title="Configurações de regras" subtitle="Perfis de arquitetura, severidades, exclusões e padrões obrigatórios por projeto." />;
+function SettingsCenter({ state }) {
+  const performance = state?.performance ?? {};
+  const integrations = state?.integrations ?? [];
+
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div>
+          <span className="eyebrow">Persistência, performance e integrações</span>
+          <h1>Configurações operacionais</h1>
+          <p>Banco local, backup, sincronização remota, cache, lazy loading e adaptadores futuros.</p>
+        </div>
+        <div className="header-actions">
+          <button onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> Banco local</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'createBackup' })}><Shield size={16} /> Backup</button>
+          <button className="primary" onClick={() => vscodeApi?.postMessage({ type: 'syncRemote' })}><RefreshCw size={16} /> Sync remoto</button>
+        </div>
+      </header>
+      <section className="summary-grid">
+        <SummaryCard title="Cache" value={performance.cacheEnabled ? 'Ativo' : 'Inativo'} label="TTL local" color="green" />
+        <SummaryCard title="Lazy loading" value={String(performance.lazySessionLimit ?? 0)} label="sessões por carga" color="blue" />
+        <SummaryCard title="Batch" value={String(performance.incrementalBatchSize ?? 0)} label="render incremental" color="yellow" />
+        <SummaryCard title="Async" value={performance.asyncProcessingEnabled ? 'Ativo' : 'Inativo'} label="processamento" color="green" />
+      </section>
+      <section className="sessions-panel">
+        <div className="section-title">
+          <div>
+            <h2>Integrações preparadas</h2>
+            <p className="muted">Adaptadores prontos para configuração sem acoplar credenciais ao núcleo da extensão.</p>
+          </div>
+        </div>
+        <div className="integration-grid">
+          {integrations.map((item) => (
+            <article className="integration-card" key={item.id}>
+              <strong>{item.name}</strong>
+              <span>{item.status}</span>
+              <p>{item.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
 }
+
 function ConformitiesCenter() {
   return <SimpleCenter title="Conformidades detectadas" subtitle="Lista de boas práticas atendidas pelo projeto e evidências de aderência arquitetural." />;
 }
@@ -923,6 +965,10 @@ function App() {
 
       if (event.data?.type === 'architectureValidationCompleted') {
         setSnackbar(`${event.data.payload.count} validações arquiteturais encontradas.`);
+      }
+
+      if (event.data?.type === 'operationCompleted') {
+        setSnackbar(event.data.payload.message);
       }
     };
 
