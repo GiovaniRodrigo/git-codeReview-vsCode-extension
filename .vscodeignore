@@ -1,7 +1,9 @@
-node_modules
 src
 test
 IA
 *.ts
 tsconfig.json
 package-lock.json
+out/test
+.vscode
+code-review-extension-*.vsix

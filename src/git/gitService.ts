@@ -6,7 +6,9 @@ const execFileAsync = promisify(execFile);
 
 export class GitService {
   public async getRepositoryRoot(): Promise<string> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined;
+    const workspaceFolder = activeFolder ?? vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error("Abra uma pasta do VS Code antes de usar o Code Review.");
     }

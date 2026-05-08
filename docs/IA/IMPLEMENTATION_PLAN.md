@@ -25,6 +25,11 @@ O projeto conta atualmente com:
 - TreeView `Git Review` no container nativo de Source Control;
 - comando para abrir detalhes de commit em documento Markdown temporario;
 - diff nativo do VS Code usando provider de documentos virtuais para conteudo Git.
+- Webview de review com metadata, estatisticas, busca, filtros e selecao multipla de commits.
+- integracao GitHub com remote, autenticacao nativa do VS Code, Pull Requests, estados e checks;
+- comandos de review para comentario geral, comentario por arquivo/linha, approve e request changes;
+- produtividade local com comparar branches, commits revisados, nao revisados, atalhos e notificacoes;
+- cache em memoria, lazy loading da TreeView, refresh em background e empacotamento VSIX.
 
 ## Fluxo IA para Novas Funcionalidades
 
@@ -122,12 +127,12 @@ src/
 | Fase | Funcionalidades | Status |
 | --- | --- | --- |
 | Fase 1 | Scaffold da extensao, Git local, branches, tags, commits, arquivos e diff | Implementado |
-| Fase 2 | Webview de review, filtros, busca e selecao de commits | Planejado |
-| Fase 3 | GitHub remote, autenticacao, PRs, status e checks | Planejado |
-| Fase 4 | Comentarios, aprovar PR, solicitar mudancas e review geral | Planejado |
-| Fase 5 | Comparacao de branches, historico local, notificacoes e monorepo | Planejado |
-| Fase 6 | Cache, lazy loading, indexacao e background refresh | Planejado |
-| Fase 7 | README, demos, icone, CHANGELOG, empacotamento e publicacao | Planejado |
+| Fase 2 | Webview de review, filtros, busca e selecao de commits | Implementado |
+| Fase 3 | GitHub remote, autenticacao, PRs, status e checks | Implementado |
+| Fase 4 | Comentarios, aprovar PR, solicitar mudancas e review geral | Implementado |
+| Fase 5 | Comparacao de branches, historico local, notificacoes e monorepo | Implementado |
+| Fase 6 | Cache, lazy loading, indexacao e background refresh | Implementado |
+| Fase 7 | README, demos, icone, CHANGELOG, empacotamento e publicacao | Implementado parcialmente |
 
 ### Fase 1 - MVP Git Local
 
@@ -160,6 +165,8 @@ Entregaveis:
 - filtros por branch, autor, data e arquivo;
 - busca de commits;
 - selecao multipla para revisao.
+
+Status: implementado no painel `Review`, aberto a partir de branches, tags ou commits na TreeView.
 
 Criterios de aceite:
 

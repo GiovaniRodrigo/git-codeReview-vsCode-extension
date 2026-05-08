@@ -41,3 +41,10 @@ export interface GitRef {
   kind: "branch" | "tag";
   type?: BranchType;
 }
+
+export interface GitHubRemote {
+  owner: string;
+  repo: string;
+  remoteName: string;
+  url: string;
+}
