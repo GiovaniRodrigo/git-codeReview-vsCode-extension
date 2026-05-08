@@ -22,6 +22,7 @@ import {
   updateReviewSessionStatus
 } from '../domain/reviewSession';
 import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
+import { AssistedIntelligenceReport, buildAssistedIntelligenceReport } from './assistedIntelligence';
 
 export interface ReviewSessionRepository {
   getCurrent(): Promise<ReviewSession | undefined>;
@@ -45,14 +46,20 @@ export class ReviewSessionService {
     private readonly sourceFileProvider?: SourceFileProvider
   ) {}
 
-  async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[]; metrics: ReviewMetrics }> {
+  async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[]; metrics: ReviewMetrics; intelligence: AssistedIntelligenceReport }> {
     const [currentSession, git, sessions] = await Promise.all([
       this.repository.getCurrent(),
       this.gitService.getContext(),
       this.repository.list()
     ]);
 
-    return { currentSession, git, sessions, metrics: calculateReviewMetrics(sessions) };
+    return {
+      currentSession,
+      git,
+      sessions,
+      metrics: calculateReviewMetrics(sessions),
+      intelligence: buildAssistedIntelligenceReport(currentSession, sessions)
+    };
   }
 
   async startReview(author: string, reviewer: string): Promise<ReviewSession> {

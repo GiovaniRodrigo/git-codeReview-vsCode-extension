@@ -560,6 +560,127 @@ function round(value) {
   return Math.round(value * 10) / 10;
 }
 
+// src/application/assistedIntelligence.ts
+function buildAssistedIntelligenceReport(currentSession, sessions) {
+  const findings = currentSession?.findings ?? [];
+  const allFindings = sessions.flatMap((session) => session.findings ?? []);
+  const recurringErrors = recurringRules(allFindings);
+  const suggestions = [
+    ...findings.flatMap((finding2) => suggestionsForFinding(finding2, recurringErrors)),
+    ...recurringErrors.map((item, index) => ({
+      id: `recurrence-${index + 1}`,
+      type: "recurrence",
+      title: `Erro recorrente: ${item.rule}`,
+      description: `A regra ${item.rule} apareceu ${item.count} vezes no hist\xF3rico local.`,
+      priority: item.count > 2 ? "HIGH" : "MEDIUM"
+    }))
+  ];
+  const patterns = detectPatterns(allFindings);
+  const comparisons = compareCurrentWithHistory(currentSession, sessions);
+  const recommendations = buildRecommendations(findings, recurringErrors, patterns);
+  return { suggestions, recurringErrors, patterns, comparisons, recommendations };
+}
+function suggestionsForFinding(finding2, recurringErrors) {
+  const priority = finding2.severity;
+  const recurring = recurringErrors.find((item) => item.rule === finding2.rule);
+  return [
+    {
+      id: `${finding2.id}-correction`,
+      findingId: finding2.id,
+      type: "correction",
+      title: `Corre\xE7\xE3o sugerida para ${finding2.rule}`,
+      description: correctionText(finding2),
+      priority
+    },
+    {
+      id: `${finding2.id}-architecture`,
+      findingId: finding2.id,
+      type: "architecture",
+      title: `Dire\xE7\xE3o arquitetural para ${finding2.rule}`,
+      description: architectureText(finding2),
+      priority
+    },
+    {
+      id: `${finding2.id}-refactor`,
+      findingId: finding2.id,
+      type: "refactor",
+      title: `Refatora\xE7\xE3o recomendada em ${finding2.file}`,
+      description: `Isole a mudan\xE7a em ${finding2.file}:${finding2.line} e mantenha hist\xF3rico da corre\xE7\xE3o na valida\xE7\xE3o original.`,
+      priority
+    },
+    {
+      id: `${finding2.id}-explanation`,
+      findingId: finding2.id,
+      type: "explanation",
+      title: `Por que ${finding2.rule} importa`,
+      description: explanationText(finding2, recurring?.count ?? 0),
+      priority
+    }
+  ];
+}
+function correctionText(finding2) {
+  const map = {
+    DIP: "Introduza uma abstra\xE7\xE3o na camada interna e mova a implementa\xE7\xE3o concreta para infraestrutura.",
+    SRP: "Separe responsabilidades em casos de uso, servi\xE7os ou fun\xE7\xF5es menores com um motivo \xFAnico de mudan\xE7a.",
+    OCP: "Substitua condicionais por estrat\xE9gia, polimorfismo ou registro extens\xEDvel de handlers.",
+    LSP: "Garanta que subclasses preservem o contrato da base sem lan\xE7ar erro para comportamento esperado.",
+    ISP: "Divida interfaces amplas em contratos menores usados por consumidores espec\xEDficos."
+  };
+  return map[finding2.rule] ?? "Aplique a menor altera\xE7\xE3o que remova a viola\xE7\xE3o e preserve o comportamento atual.";
+}
+function architectureText(finding2) {
+  if (finding2.description.includes("Clean Architecture")) {
+    return "Mantenha depend\xEAncias apontando para dentro: dom\xEDnio independente, aplica\xE7\xE3o orquestrando contratos e infraestrutura nos detalhes.";
+  }
+  if (finding2.description.includes("DDD")) {
+    return "Reforce linguagem ub\xEDqua, identidade de entidades, imutabilidade de value objects e isolamento do dom\xEDnio.";
+  }
+  return "Prefira baixo acoplamento, alta coes\xE3o e depend\xEAncias expl\xEDcitas entre m\xF3dulos.";
+}
+function explanationText(finding2, recurrenceCount) {
+  const recurrence = recurrenceCount > 1 ? ` Esta regra j\xE1 apareceu ${recurrenceCount} vezes no hist\xF3rico local.` : "";
+  return `${finding2.rule} foi marcado como ${finding2.severity} porque impacta manuten\xE7\xE3o, rastreabilidade ou isolamento arquitetural.${recurrence}`;
+}
+function recurringRules(findings) {
+  const counts = /* @__PURE__ */ new Map();
+  findings.forEach((finding2) => counts.set(finding2.rule, (counts.get(finding2.rule) ?? 0) + 1));
+  return Array.from(counts.entries()).filter(([, count]) => count > 1).map(([rule, count]) => ({ rule, count })).sort((a, b) => b.count - a.count || a.rule.localeCompare(b.rule));
+}
+function detectPatterns(findings) {
+  const patterns = [];
+  const criticalCount = findings.filter((finding2) => finding2.severity === "CRITICAL").length;
+  const reopenedCount = findings.filter((finding2) => finding2.statusHistory.some((entry) => entry.status === "REOPENED")).length;
+  if (criticalCount >= 2) patterns.push("Concentra\xE7\xE3o de viola\xE7\xF5es cr\xEDticas em revis\xF5es recentes.");
+  if (reopenedCount >= 2) patterns.push("Corre\xE7\xF5es t\xEAm sido reabertas com frequ\xEAncia.");
+  if (recurringRules(findings).length) patterns.push("H\xE1 regras arquiteturais recorrentes que merecem a\xE7\xE3o preventiva.");
+  return patterns;
+}
+function compareCurrentWithHistory(currentSession, sessions) {
+  if (!currentSession) return [];
+  const previous = sessions.filter((session) => session.id !== currentSession.id);
+  if (!previous.length) return ["Sem revis\xF5es antigas suficientes para compara\xE7\xE3o."];
+  const currentFindings = currentSession.findings?.length ?? 0;
+  const averagePrevious = previous.reduce((total, session) => total + (session.findings?.length ?? 0), 0) / previous.length;
+  const direction = currentFindings > averagePrevious ? "acima" : "abaixo";
+  return [`A sess\xE3o atual est\xE1 ${direction} da m\xE9dia hist\xF3rica de findings (${currentFindings} vs ${averagePrevious.toFixed(1)}).`];
+}
+function buildRecommendations(findings, recurringErrors, patterns) {
+  const recommendations = [];
+  if (findings.some((finding2) => finding2.severity === "CRITICAL" && finding2.status !== "APPROVED")) {
+    recommendations.push("Bloqueie aprova\xE7\xE3o at\xE9 resolver findings cr\xEDticos.");
+  }
+  if (recurringErrors.length) {
+    recommendations.push(`Priorize uma melhoria sist\xEAmica para ${recurringErrors[0].rule}.`);
+  }
+  if (patterns.length) {
+    recommendations.push("Inclua uma checagem preventiva no fluxo de review para o padr\xE3o detectado.");
+  }
+  if (!recommendations.length) {
+    recommendations.push("Mantenha a revis\xE3o incremental e registre decis\xF5es relevantes na timeline.");
+  }
+  return recommendations;
+}
+
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
   constructor(repository, gitService, sourceFileProvider) {
@@ -573,7 +694,13 @@ var ReviewSessionService = class {
       this.gitService.getContext(),
       this.repository.list()
     ]);
-    return { currentSession, git: git2, sessions, metrics: calculateReviewMetrics(sessions) };
+    return {
+      currentSession,
+      git: git2,
+      sessions,
+      metrics: calculateReviewMetrics(sessions),
+      intelligence: buildAssistedIntelligenceReport(currentSession, sessions)
+    };
   }
   async startReview(author, reviewer) {
     const git2 = await this.gitService.getContext();

@@ -407,6 +407,48 @@ h1 { margin: 8px 0 6px; font-size: 28px; }
   line-height: 1.45;
   font-size: 13px;
 }
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 10px;
+}
+.intelligence-grid article {
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-md);
+  background: var(--md-sys-color-surface-container-high);
+  padding: 12px;
+}
+.intelligence-grid h3 {
+  margin: 10px 0 6px;
+  font-size: 15px;
+}
+.intelligence-grid p,
+.text-list p {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.45;
+}
+.recommendation-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.recommendation-strip span {
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 999px;
+  background: var(--md-sys-color-surface);
+  padding: 6px 10px;
+  color: var(--md-sys-color-on-surface);
+  font-size: 12px;
+}
+.text-list { display: grid; gap: 8px; }
+.text-list p {
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-md);
+  background: var(--md-sys-color-surface-container-high);
+  padding: 10px 12px;
+}
 .findings-list { display: grid; gap: 8px; }
 .finding-item {
   border: 1px solid var(--md-sys-color-outline);
@@ -743,6 +785,7 @@ tr:last-child td { border-bottom: 0; }
   .summary-grid, .insight-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-grid { grid-template-columns: 1fr; }
   .architecture-rules-grid { grid-template-columns: 1fr; }
+  .intelligence-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 820px) {

@@ -11,6 +11,7 @@ import {
   GitPullRequest,
   Home,
   Info,
+  Lightbulb,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -41,6 +42,7 @@ function ReviewLeftbar({ view, setView, state }) {
   const nav = [
     ['dashboard', Home, 'Dashboard', '82'],
     ['analysis', AlertTriangle, 'Diagnósticos', '25'],
+    ['intelligence', Lightbulb, 'Inteligência', state?.intelligence?.suggestions?.length ? String(state.intelligence.suggestions.length) : ''],
     ['comments', MessageSquare, 'Comentários', session?.comments?.length ? String(session.comments.length) : ''],
     ['conformities', CheckCircle2, 'Conformidades', '68'],
     ['telemetry', BarChart3, 'Telemetria', '94%'],
@@ -99,6 +101,7 @@ function RuleItem({ color, label, count }) {
 function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'telemetry') return <TelemetryCenter state={state} />;
   if (view === 'history') return <HistoryCenter state={state} />;
+  if (view === 'intelligence') return <IntelligenceCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
   if (view === 'settings') return <SettingsCenter />;
   if (view === 'conformities') return <ConformitiesCenter />;
@@ -148,6 +151,7 @@ function ReviewCenter({ view, state, onStartReview }) {
       <CommentsPanel session={state?.currentSession} />
       <ValidationFindingsPanel session={state?.currentSession} git={state?.git} />
       <ArchitectureRulesPanel session={state?.currentSession} />
+      <IntelligencePanel intelligence={state?.intelligence} />
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -351,6 +355,34 @@ function ArchitectureRulesPanel({ session }) {
             <p>{text}</p>
           </article>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function IntelligencePanel({ intelligence }) {
+  const suggestions = intelligence?.suggestions ?? [];
+  const recommendations = intelligence?.recommendations ?? [];
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Inteligência assistida</h2>
+          <p className="muted">Sugestões locais baseadas em findings, histórico e reincidência.</p>
+        </div>
+      </div>
+      <div className="intelligence-grid">
+        {suggestions.length ? suggestions.slice(0, 4).map((suggestion) => (
+          <article key={suggestion.id}>
+            <Badge>{suggestion.type}</Badge>
+            <h3>{suggestion.title}</h3>
+            <p>{suggestion.description}</p>
+          </article>
+        )) : <p className="empty-state">Sem sugestões inteligentes ainda.</p>}
+      </div>
+      <div className="recommendation-strip">
+        {recommendations.map((item) => <span key={item}>{item}</span>)}
       </div>
     </section>
   );
@@ -702,6 +734,41 @@ function TelemetryCenter({ state }) {
         </div>
       </section>
     </main>
+  );
+}
+
+function IntelligenceCenter({ state }) {
+  const intelligence = state?.intelligence ?? {};
+
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div><span className="eyebrow">Inteligência</span><h1>Assistência de revisão</h1><p>Sugestões de correção, arquitetura, refatoração e análise histórica.</p></div>
+      </header>
+      <section className="summary-grid">
+        <SummaryCard title="Sugestões" value={String(intelligence.suggestions?.length ?? 0)} label="geradas localmente" color="green" />
+        <SummaryCard title="Recorrências" value={String(intelligence.recurringErrors?.length ?? 0)} label="regras repetidas" color="red" />
+        <SummaryCard title="Padrões" value={String(intelligence.patterns?.length ?? 0)} label="detectados" color="yellow" />
+        <SummaryCard title="Recomendações" value={String(intelligence.recommendations?.length ?? 0)} label="ações propostas" color="blue" />
+      </section>
+      <IntelligencePanel intelligence={intelligence} />
+      <section className="dashboard-grid">
+        <TextListPanel title="Erros recorrentes" items={(intelligence.recurringErrors ?? []).map((item) => `${item.rule}: ${item.count}`)} />
+        <TextListPanel title="Padrões detectados" items={intelligence.patterns ?? []} />
+        <TextListPanel title="Comparação histórica" items={intelligence.comparisons ?? []} />
+      </section>
+    </main>
+  );
+}
+
+function TextListPanel({ title, items }) {
+  return (
+    <section className="sessions-panel">
+      <div className="section-title"><h2>{title}</h2></div>
+      <div className="text-list">
+        {items.length ? items.map((item) => <p key={item}>{item}</p>) : <p className="empty-state">Sem dados suficientes.</p>}
+      </div>
+    </section>
   );
 }
 

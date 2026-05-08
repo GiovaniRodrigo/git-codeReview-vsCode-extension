@@ -272,19 +272,19 @@ Auxiliar reviewer e desenvolvedor.
 
 ### Sugestões Inteligentes
 
-* [ ] Sugestão de correção
-* [ ] Sugestão arquitetural
-* [ ] Sugestão de refatoração
-* [ ] Explicação da violação
+* [x] Sugestão de correção
+* [x] Sugestão arquitetural
+* [x] Sugestão de refatoração
+* [x] Explicação da violação
 
 ---
 
 ### Histórico Inteligente
 
-* [ ] Buscar erros recorrentes
-* [ ] Detectar padrões
-* [ ] Comparar revisões antigas
-* [ ] Recomendação automática
+* [x] Buscar erros recorrentes
+* [x] Detectar padrões
+* [x] Comparar revisões antigas
+* [x] Recomendação automática
 
 ---
 
