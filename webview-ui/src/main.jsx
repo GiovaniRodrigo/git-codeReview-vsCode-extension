@@ -20,6 +20,11 @@ import {
   Loader2,
   MessageSquare,
   MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  GripVertical,
   Pencil,
   Play,
   RefreshCw,
@@ -41,7 +46,7 @@ const colors = {
   blue: '#3b82f6'
 };
 
-function ReviewLeftbar({ view, setView, state, onStartTour }) {
+function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
   const session = state?.currentSession;
   const git = state?.git;
   const nav = [
@@ -67,10 +72,13 @@ function ReviewLeftbar({ view, setView, state, onStartTour }) {
             className="brand-logo"
           />
         </div>
-        <div>
+        <div className="brand-text">
           <strong>Code Review</strong>
           <span>Governança arquitetural</span>
         </div>
+        <button className="sidebar-toggle" title="Ocultar menu lateral esquerdo" onClick={onToggle}>
+          <PanelLeftClose size={16} />
+        </button>
       </div>
 
       <section className="review-state">
@@ -925,12 +933,16 @@ function StatusControls({ session }) {
   );
 }
 
-function Rightbar({ metrics, state, onSetView, onStartReview }) {
+function Rightbar({ metrics, state, onSetView, onStartReview, onToggle }) {
   return (
     <aside className="rightbar">
       <header>
         <span>Revisão atual</span>
-        <div><RefreshCw size={17} /><MoreVertical size={17} /></div>
+        <div>
+          <button className="sidebar-toggle inline" title="Ocultar painel lateral direito" onClick={onToggle}><PanelRightClose size={16} /></button>
+          <RefreshCw size={17} />
+          <MoreVertical size={17} />
+        </div>
       </header>
 
       <section className="quality-card">
@@ -1399,6 +1411,32 @@ function getTourPopoverStyle(rect, placement = 'bottom') {
   };
 }
 
+
+function ResizeHandle({ side, onResizeStart }) {
+  return (
+    <button
+      className={`resize-handle ${side}`}
+      title="Redimensionar painel lateral"
+      aria-label="Redimensionar painel lateral"
+      onMouseDown={(event) => onResizeStart(event, side)}
+    >
+      <GripVertical size={14} />
+    </button>
+  );
+}
+
+function CollapsedSidebarToggle({ side, onToggle }) {
+  const Icon = side === 'left' ? PanelLeftOpen : PanelRightOpen;
+  const label = side === 'left' ? 'Mostrar menu lateral esquerdo' : 'Mostrar painel lateral direito';
+  return (
+    <aside className={`collapsed-sidebar ${side}`}>
+      <button title={label} aria-label={label} onClick={onToggle}>
+        <Icon size={18} />
+      </button>
+    </aside>
+  );
+}
+
 function App() {
   const initialView = document.body?.dataset?.initialView || 'dashboard';
   const [view, setView] = useState(initialView);
@@ -1406,6 +1444,10 @@ function App() {
   const [snackbar, setSnackbar] = useState('Carregando contexto da revisão...');
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+  const [leftSidebarHidden, setLeftSidebarHidden] = useState(false);
+  const [rightSidebarHidden, setRightSidebarHidden] = useState(false);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(282);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(430);
 
   useEffect(() => {
     const seenTour = window.localStorage.getItem('codeReviewOnboardingSeen');
@@ -1466,11 +1508,58 @@ function App() {
     setSnackbar('Tutorial concluído. Você pode reabrir pelo menu lateral.');
   };
 
+  const startSidebarResize = (event, side) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth;
+
+    const onMouseMove = (moveEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (side === 'left') {
+        setLeftSidebarWidth(Math.min(420, Math.max(220, startWidth + delta)));
+      } else {
+        setRightSidebarWidth(Math.min(560, Math.max(300, startWidth - delta)));
+      }
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
   return (
-    <div className="app-shell">
-      <ReviewLeftbar view={view} setView={setView} state={state} onStartTour={startTour} />
+    <div
+      className="app-shell"
+      style={{
+        '--left-sidebar-width': leftSidebarHidden ? '48px' : `${leftSidebarWidth}px`,
+        '--right-sidebar-width': rightSidebarHidden ? '48px' : `${rightSidebarWidth}px`
+      }}
+    >
+      <div className={`sidebar-region left ${leftSidebarHidden ? 'collapsed' : ''}`}>
+        {leftSidebarHidden ? (
+          <CollapsedSidebarToggle side="left" onToggle={() => setLeftSidebarHidden(false)} />
+        ) : (
+          <>
+            <ReviewLeftbar view={view} setView={setView} state={state} onStartTour={startTour} onToggle={() => setLeftSidebarHidden(true)} />
+            <ResizeHandle side="left" onResizeStart={startSidebarResize} />
+          </>
+        )}
+      </div>
       <ReviewCenter view={view} state={state} onStartReview={startReview} />
-      <Rightbar metrics={state?.metrics} state={state} onSetView={setView} onStartReview={startReview} />
+      <div className={`sidebar-region right ${rightSidebarHidden ? 'collapsed' : ''}`}>
+        {rightSidebarHidden ? (
+          <CollapsedSidebarToggle side="right" onToggle={() => setRightSidebarHidden(false)} />
+        ) : (
+          <>
+            <ResizeHandle side="right" onResizeStart={startSidebarResize} />
+            <Rightbar metrics={state?.metrics} state={state} onSetView={setView} onStartReview={startReview} onToggle={() => setRightSidebarHidden(true)} />
+          </>
+        )}
+      </div>
       <GuidedTour
         active={tourActive}
         steps={defaultTourSteps}
