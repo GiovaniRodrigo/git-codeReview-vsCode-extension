@@ -1,0 +1,55 @@
+{
+  "name": "code-review-vscode-extension",
+  "displayName": "Code Review Design Extension",
+  "description": "Extensão VS Code com Webview fiel ao design de code review, PR review e analytics.",
+  "version": "1.0.0",
+  "publisher": "local-dev",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codeReview.openDashboard",
+    "onCommand:codeReview.startReview",
+    "onCommand:codeReview.openPullRequest"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeReview.openDashboard",
+        "title": "Code Review: Abrir Dashboard"
+      },
+      {
+        "command": "codeReview.startReview",
+        "title": "Code Review: Iniciar Revisão"
+      },
+      {
+        "command": "codeReview.openPullRequest",
+        "title": "Code Review: Abrir Pull Request"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "npm run install:webview && npm run build:webview && npm run build:extension",
+    "build": "npm run compile",
+    "build:extension": "node esbuild.mjs",
+    "build:webview": "npm --prefix webview-ui run build",
+    "watch": "npm run watch:extension",
+    "watch:extension": "node esbuild.mjs --watch",
+    "watch:webview": "npm --prefix webview-ui run build -- --watch",
+    "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
+    "install:webview": "npm --prefix webview-ui install",
+    "clean": "rm -rf dist webview-ui/dist node_modules webview-ui/node_modules package-lock.json webview-ui/package-lock.json"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^2.15.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.4.5"
+  }
+}
