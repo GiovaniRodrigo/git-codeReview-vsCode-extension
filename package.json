@@ -4,7 +4,6 @@
   "description": "Navigate local Git branches, tags, commits, changed files, and diffs from VS Code.",
   "version": "0.0.1",
   "publisher": "giovani",
-  "private": true,
   "icon": "assets/icon.png",
   "repository": {
     "type": "git",
@@ -14,7 +13,8 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Source Control"
+    "SCM Providers",
+    "Other"
   ],
   "activationEvents": [
     "onView:codeReviewExplorer",
