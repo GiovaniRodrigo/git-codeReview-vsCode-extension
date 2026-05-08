@@ -8,7 +8,7 @@
 
 **Stack alvo:** TypeScript, VS Code Extension API, Git CLI/local repository, GitHub REST API, Webview API, TreeView API, testes automatizados com a stack padrao de extensoes VS Code.
 
-**Estado atual:** Fase 1 implementada como MVP Git local. Ha scaffold de extensao VS Code em TypeScript, TreeView no container de Source Control, servicos Git locais, provider de conteudo para diff nativo e testes unitarios de parsers.
+**Estado atual:** Roadmap implementado localmente ate empacotamento VSIX. Ha scaffold de extensao VS Code em TypeScript, TreeView no container de Source Control, servicos Git locais, provider de conteudo para diff nativo, Webview de review, integracao GitHub com PRs/checks/review actions, produtividade local, cache, background refresh, artefatos de publicacao e testes unitarios.
 
 ## 2. Entidades Core
 
@@ -104,6 +104,14 @@ Camadas principais:
 - `src/git/`: servicos Git locais, contratos e parsers.
 - `src/tree/`: provider e nodes da TreeView.
 - `src/review/`: provider de documentos virtuais para diff.
+- `src/review/reviewPanel.ts`: Webview de review com metadata, estatisticas, filtros, busca e selecao multipla.
+- `src/review/reviewModel.ts`: agregacao de commits para o painel de review.
+- `src/review/diffRenderer.ts`: diff estilo GitHub em Webview.
+- `src/github/`: deteccao de remote GitHub, autenticacao Octokit, PRs, checks e review actions.
+- `src/productivity/`: historico local de commits revisados e comandos de produtividade.
+- `assets/`: icone da extensao.
+- `CHANGELOG.md`: historico de publicacao.
+- `DEMO.md`: roteiro de demonstracao.
 - `src/utils/`: formatacao e tratamento de erros.
 - `test/`: testes unitarios.
 - `IA/README.md`: indice e orientacao da pasta de contexto.

@@ -5,6 +5,7 @@
   "version": "0.0.1",
   "publisher": "local",
   "private": true,
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -15,11 +16,32 @@
   "activationEvents": [
     "onView:codeReviewExplorer",
     "onCommand:codeReview.refresh",
+    "onCommand:codeReview.openReview",
+    "onCommand:codeReview.signInGitHub",
+    "onCommand:codeReview.openPullRequest",
+    "onCommand:codeReview.approvePullRequest",
+    "onCommand:codeReview.requestChanges",
+    "onCommand:codeReview.commentPullRequest",
     "onCommand:codeReview.openCommitDetails",
-    "onCommand:codeReview.openFileDiff"
+    "onCommand:codeReview.openFileDiff",
+    "onCommand:codeReview.openGithubStyleDiff",
+    "onCommand:codeReview.addReviewComment",
+    "onCommand:codeReview.compareBranches",
+    "onCommand:codeReview.markReviewed",
+    "onCommand:codeReview.showUnreviewed"
   ],
   "main": "./out/src/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Code Review",
+      "properties": {
+        "codeReview.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable optional telemetry. The extension currently does not send telemetry events."
+        }
+      }
+    },
     "views": {
       "scm": [
         {
@@ -31,7 +53,33 @@
     "commands": [
       {
         "command": "codeReview.refresh",
-        "title": "Code Review: Refresh"
+        "title": "Code Review: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codeReview.openReview",
+        "title": "Code Review: Open Review"
+      },
+      {
+        "command": "codeReview.signInGitHub",
+        "title": "Code Review: Sign In to GitHub",
+        "icon": "$(github-inverted)"
+      },
+      {
+        "command": "codeReview.openPullRequest",
+        "title": "Code Review: Open Pull Request"
+      },
+      {
+        "command": "codeReview.approvePullRequest",
+        "title": "Code Review: Approve Pull Request"
+      },
+      {
+        "command": "codeReview.requestChanges",
+        "title": "Code Review: Request Changes"
+      },
+      {
+        "command": "codeReview.commentPullRequest",
+        "title": "Code Review: Comment Pull Request"
       },
       {
         "command": "codeReview.openCommitDetails",
@@ -40,6 +88,28 @@
       {
         "command": "codeReview.openFileDiff",
         "title": "Code Review: Open File Diff"
+      },
+      {
+        "command": "codeReview.openGithubStyleDiff",
+        "title": "Code Review: Open GitHub Style Diff"
+      },
+      {
+        "command": "codeReview.addReviewComment",
+        "title": "Code Review: Add Review Comment"
+      },
+      {
+        "command": "codeReview.compareBranches",
+        "title": "Code Review: Compare Branches",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "codeReview.markReviewed",
+        "title": "Code Review: Mark Commit Reviewed"
+      },
+      {
+        "command": "codeReview.showUnreviewed",
+        "title": "Code Review: Show Unreviewed Commits",
+        "icon": "$(checklist)"
       }
     ],
     "menus": {
@@ -48,11 +118,36 @@
           "command": "codeReview.refresh",
           "when": "view == codeReviewExplorer",
           "group": "navigation"
+        },
+        {
+          "command": "codeReview.compareBranches",
+          "when": "view == codeReviewExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "codeReview.showUnreviewed",
+          "when": "view == codeReviewExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "codeReview.signInGitHub",
+          "when": "view == codeReviewExplorer",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
         {
+          "command": "codeReview.openReview",
+          "when": "view == codeReviewExplorer && viewItem =~ /reviewable/",
+          "group": "inline"
+        },
+        {
           "command": "codeReview.openCommitDetails",
+          "when": "view == codeReviewExplorer && viewItem == commit",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.markReviewed",
           "when": "view == codeReviewExplorer && viewItem == commit",
           "group": "inline"
         },
@@ -60,18 +155,63 @@
           "command": "codeReview.openFileDiff",
           "when": "view == codeReviewExplorer && viewItem == file",
           "group": "inline"
+        },
+        {
+          "command": "codeReview.openGithubStyleDiff",
+          "when": "view == codeReviewExplorer && viewItem == file",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.addReviewComment",
+          "when": "view == codeReviewExplorer && viewItem == file",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.approvePullRequest",
+          "when": "view == codeReviewExplorer && viewItem == pullRequest",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.requestChanges",
+          "when": "view == codeReviewExplorer && viewItem == pullRequest",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.commentPullRequest",
+          "when": "view == codeReviewExplorer && viewItem == pullRequest",
+          "group": "inline"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "codeReview.refresh",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "view == codeReviewExplorer"
+      },
+      {
+        "command": "codeReview.compareBranches",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "lint": "tsc -p ./ --noEmit",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test \"out/test/**/*.test.js\""
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package --allow-missing-repository",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/node": "^20.14.8",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.5.2"
+  },
+  "dependencies": {
+    "@octokit/rest": "^22.0.1"
   }
 }

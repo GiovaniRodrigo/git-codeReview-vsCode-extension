@@ -52,22 +52,22 @@ Melhorar experiência visual de revisão.
 
 ## Tasks
 
-- [ ] Criar Webview de review
-- [ ] Mostrar metadata do commit
+- [x] Criar Webview de review
+- [x] Mostrar metadata do commit
   - autor
   - data
   - hash
   - mensagem
-- [ ] Mostrar estatísticas
+- [x] Mostrar estatísticas
   - linhas adicionadas
   - linhas removidas
-- [ ] Adicionar filtros
+- [x] Adicionar filtros
   - branch
   - autor
   - data
   - arquivos
-- [ ] Adicionar busca de commits
-- [ ] Selecionar vários commits para revisão
+- [x] Adicionar busca de commits
+- [x] Selecionar vários commits para revisão
 
 ## Resultado esperado
 
@@ -83,17 +83,17 @@ Relacionar branches com Pull Requests.
 
 ## Tasks
 
-- [ ] Detectar remote GitHub
-- [ ] Implementar autenticação GitHub
-- [ ] Integrar GitHub REST API
-- [ ] Buscar Pull Requests
-- [ ] Relacionar branch ↔ PR
-- [ ] Mostrar status do PR
+- [x] Detectar remote GitHub
+- [x] Implementar autenticação GitHub
+- [x] Integrar GitHub REST API
+- [x] Buscar Pull Requests
+- [x] Relacionar branch ↔ PR
+- [x] Mostrar status do PR
   - aberto
   - fechado
   - mergeado
   - draft
-- [ ] Mostrar checks/CI
+- [x] Mostrar checks/CI
 
 ## Resultado esperado
 
@@ -113,13 +113,13 @@ Permitir review direto pela extensão.
 
 ## Tasks
 
-- [ ] Mostrar diff estilo GitHub
-- [ ] Permitir comentário por arquivo
-- [ ] Permitir comentário por linha
-- [ ] Enviar comentários ao GitHub
-- [ ] Aprovar Pull Request
-- [ ] Solicitar mudanças
-- [ ] Adicionar review geral
+- [x] Mostrar diff estilo GitHub
+- [x] Permitir comentário por arquivo
+- [x] Permitir comentário por linha
+- [x] Enviar comentários ao GitHub
+- [x] Aprovar Pull Request
+- [x] Solicitar mudanças
+- [x] Adicionar review geral
 
 ## Resultado esperado
 
@@ -135,15 +135,15 @@ Melhorar workflow para times.
 
 ## Tasks
 
-- [ ] Comparar branches
-- [ ] Revisar tags
-- [ ] Mostrar commits não revisados
-- [ ] Salvar histórico local
-- [ ] Marcar commits revisados
-- [ ] Notificações de novos commits
-- [ ] Atalhos rápidos
-- [ ] Suporte a monorepo
-- [ ] Multi-root workspace
+- [x] Comparar branches
+- [x] Revisar tags
+- [x] Mostrar commits não revisados
+- [x] Salvar histórico local
+- [x] Marcar commits revisados
+- [x] Notificações de novos commits
+- [x] Atalhos rápidos
+- [x] Suporte a monorepo
+- [x] Multi-root workspace
 
 ---
 
@@ -155,12 +155,12 @@ Escalar para projetos grandes.
 
 ## Tasks
 
-- [ ] Cache de commits
-- [ ] Lazy loading
-- [ ] Atualização incremental
-- [ ] Virtualização da árvore
-- [ ] Background refresh
-- [ ] Indexação local
+- [x] Cache de commits
+- [x] Lazy loading
+- [x] Atualização incremental
+- [x] Virtualização da árvore
+- [x] Background refresh
+- [x] Indexação local
 
 ---
 
@@ -172,18 +172,20 @@ Publicar no VS Code Marketplace.
 
 ## Tasks
 
-- [ ] Criar README
-- [ ] Criar GIFs/demo
-- [ ] Criar ícone
-- [ ] Configurar CHANGELOG
-- [ ] Configurar telemetry opcional
-- [ ] Empacotar extensão
+- [x] Criar README
+- [x] Criar GIFs/demo
+- [x] Criar ícone
+- [x] Configurar CHANGELOG
+- [x] Configurar telemetry opcional
+- [x] Empacotar extensão
 
 ```bash
 vsce package
 ```
 
 - [ ] Publicar
+
+Pendente por exigir credenciais/token do VS Code Marketplace.
 
 ```bash
 vsce publish
