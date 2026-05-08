@@ -34,28 +34,228 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode = __toESM(require("vscode"));
-function activate(context) {
-  context.subscriptions.push(
-    vscode.commands.registerCommand("codeReview.openDashboard", () => openReviewPanel(context, "dashboard")),
-    vscode.commands.registerCommand("codeReview.startReview", () => openReviewPanel(context, "analysis")),
-    vscode.commands.registerCommand("codeReview.openPullRequest", () => openReviewPanel(context, "dashboard"))
-  );
-  openReviewPanel(context, "dashboard");
+var vscode2 = __toESM(require("vscode"));
+
+// src/domain/reviewSession.ts
+function createReviewSession(input) {
+  if (!input.git.currentBranch) {
+    throw new Error("A branch origem e obrigatoria para criar uma review session.");
+  }
+  if (!input.git.baseBranch) {
+    throw new Error("A branch destino e obrigatoria para criar uma review session.");
+  }
+  if (!input.author) {
+    throw new Error("O autor e obrigatorio para criar uma review session.");
+  }
+  if (!input.reviewer) {
+    throw new Error("O reviewer e obrigatorio para criar uma review session.");
+  }
+  const now = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const id = input.id ?? `review-${Date.now()}`;
+  return {
+    id,
+    sourceBranch: input.git.currentBranch,
+    targetBranch: input.git.baseBranch,
+    author: input.author,
+    reviewer: input.reviewer,
+    status: "OPEN",
+    createdAt: now,
+    updatedAt: now,
+    pullRequestId: input.git.pullRequestId,
+    changedFiles: input.git.changedFiles,
+    commits: input.git.commits,
+    history: [
+      {
+        id: `${id}-created`,
+        type: "SESSION_CREATED",
+        message: `Review criada para ${input.git.currentBranch} -> ${input.git.baseBranch}`,
+        createdAt: now
+      }
+    ]
+  };
 }
-function openReviewPanel(context, view) {
-  const panel = vscode.window.createWebviewPanel(
-    "codeReviewDashboard",
-    view === "dashboard" ? "Code Review Dashboard" : "Review Analysis",
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "webview-ui", "dist")]
+function updateReviewSessionGitContext(session, git2, now = /* @__PURE__ */ new Date()) {
+  const updatedAt = now.toISOString();
+  return {
+    ...session,
+    sourceBranch: git2.currentBranch,
+    targetBranch: git2.baseBranch,
+    pullRequestId: git2.pullRequestId,
+    changedFiles: git2.changedFiles,
+    commits: git2.commits,
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-git-${session.history.length + 1}`,
+        type: "GIT_CONTEXT_REFRESHED",
+        message: `Contexto Git atualizado para ${git2.currentBranch} -> ${git2.baseBranch}`,
+        createdAt: updatedAt
+      }
+    ]
+  };
+}
+
+// src/application/reviewSessionService.ts
+var ReviewSessionService = class {
+  constructor(repository, gitService) {
+    this.repository = repository;
+    this.gitService = gitService;
+  }
+  async getDashboardState() {
+    const [currentSession, git2, sessions] = await Promise.all([
+      this.repository.getCurrent(),
+      this.gitService.getContext(),
+      this.repository.list()
+    ]);
+    return { currentSession, git: git2, sessions };
+  }
+  async startReview(author, reviewer) {
+    const git2 = await this.gitService.getContext();
+    const existing = await this.repository.getCurrent();
+    const session = existing ? updateReviewSessionGitContext(existing, git2) : createReviewSession({ git: git2, author, reviewer });
+    await this.repository.saveCurrent(session);
+    return session;
+  }
+};
+
+// src/infrastructure/gitCliService.ts
+var import_node_child_process = require("node:child_process");
+var import_node_util = require("node:util");
+var execFileAsync = (0, import_node_util.promisify)(import_node_child_process.execFile);
+var GitCliService = class {
+  constructor(workspaceFolder) {
+    this.workspaceFolder = workspaceFolder;
+  }
+  async getContext() {
+    if (!this.workspaceFolder) {
+      return emptyGitContext("sem-workspace");
     }
-  );
-  panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri, view);
+    const cwd = this.workspaceFolder.uri.fsPath;
+    try {
+      const [currentBranch, baseBranch, changedFiles, commits] = await Promise.all([
+        git(cwd, ["branch", "--show-current"]),
+        detectBaseBranch(cwd),
+        git(cwd, ["diff", "--name-only", "HEAD"]),
+        git(cwd, ["log", "--oneline", "--max-count=20"])
+      ]);
+      return {
+        currentBranch: currentBranch.trim() || "detached-head",
+        baseBranch,
+        pullRequestId: detectPullRequestId(currentBranch),
+        changedFiles: lines(changedFiles),
+        commits: lines(commits)
+      };
+    } catch {
+      return emptyGitContext("git-indisponivel");
+    }
+  }
+};
+async function detectBaseBranch(cwd) {
+  const branches = await git(cwd, ["branch", "--format=%(refname:short)"]);
+  const names = lines(branches);
+  if (names.includes("main")) return "main";
+  if (names.includes("master")) return "master";
+  if (names.includes("develop")) return "develop";
+  return names.find((name) => !name.startsWith("*")) ?? "main";
 }
+async function git(cwd, args) {
+  const { stdout } = await execFileAsync("git", args, { cwd });
+  return stdout;
+}
+function lines(value) {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+function detectPullRequestId(branch) {
+  const match = branch.match(/(?:pr|pull|pull-request)[/-](\d+)/i);
+  return match?.[1];
+}
+function emptyGitContext(currentBranch) {
+  return {
+    currentBranch,
+    baseBranch: "main",
+    changedFiles: [],
+    commits: []
+  };
+}
+
+// src/infrastructure/vscodeReviewSessionRepository.ts
+var CURRENT_SESSION_KEY = "codeReview.currentSession";
+var SESSIONS_KEY = "codeReview.sessions";
+var VscodeReviewSessionRepository = class {
+  constructor(context) {
+    this.context = context;
+  }
+  async getCurrent() {
+    return this.context.workspaceState.get(CURRENT_SESSION_KEY);
+  }
+  async list() {
+    return this.context.workspaceState.get(SESSIONS_KEY, []);
+  }
+  async saveCurrent(session) {
+    const sessions = await this.list();
+    const nextSessions = [session, ...sessions.filter((item) => item.id !== session.id)];
+    await this.context.workspaceState.update(CURRENT_SESSION_KEY, session);
+    await this.context.workspaceState.update(SESSIONS_KEY, nextSessions);
+  }
+};
+
+// src/presentation/reviewPanel.ts
+var vscode = __toESM(require("vscode"));
+var ReviewPanel = class {
+  constructor(context, service) {
+    this.context = context;
+    this.service = service;
+  }
+  open(view) {
+    if (this.panel) {
+      this.panel.reveal(vscode.ViewColumn.One);
+      this.postState();
+      return;
+    }
+    this.panel = vscode.window.createWebviewPanel(
+      "codeReviewDashboard",
+      view === "dashboard" ? "Code Review Dashboard" : "Review Analysis",
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, "webview-ui", "dist")]
+      }
+    );
+    this.panel.onDidDispose(() => {
+      this.panel = void 0;
+    });
+    this.panel.webview.onDidReceiveMessage((message) => this.handleMessage(message));
+    this.panel.webview.html = getWebviewHtml(this.panel.webview, this.context.extensionUri, view);
+    this.postState();
+  }
+  async startReview() {
+    if (!this.panel) {
+      this.open("analysis");
+    }
+    const author = await getGitUserName();
+    const reviewer = vscode.env.machineId;
+    const session = await this.service.startReview(author, reviewer);
+    this.post({ type: "reviewSessionStarted", payload: session });
+    vscode.window.showInformationMessage("Review session iniciada.");
+  }
+  async handleMessage(message) {
+    if (message.type === "requestState") {
+      await this.postState();
+    }
+    if (message.type === "startReview") {
+      await this.startReview();
+    }
+  }
+  async postState() {
+    const state = await this.service.getDashboardState();
+    this.post({ type: "dashboardState", payload: state });
+  }
+  post(message) {
+    this.panel?.webview.postMessage(message);
+  }
+};
 function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
   const distUri = vscode.Uri.joinPath(extensionUri, "webview-ui", "dist");
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(distUri, "assets", "index.js"));
@@ -79,6 +279,10 @@ function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
 </html>`
   );
 }
+async function getGitUserName() {
+  const config = vscode.workspace.getConfiguration("git");
+  return config.get("user.name") ?? vscode.env.machineId;
+}
 function getNonce() {
   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let text = "";
@@ -86,6 +290,50 @@ function getNonce() {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }
   return text;
+}
+
+// src/presentation/reviewSidebarProvider.ts
+var ReviewSidebarProvider = class {
+  constructor(service) {
+    this.service = service;
+  }
+  static {
+    this.viewType = "codeReview.sidebar";
+  }
+  async resolveWebviewView(webviewView) {
+    const state = await this.service.getDashboardState();
+    const session = state.currentSession;
+    webviewView.webview.options = { enableScripts: false };
+    webviewView.webview.html = `<!doctype html>
+<html lang="pt-BR">
+<body style="font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px;">
+  <h2 style="font-size: 16px;">Code Review</h2>
+  <p><strong>Branch:</strong> ${escapeHtml(state.git.currentBranch)}</p>
+  <p><strong>Destino:</strong> ${escapeHtml(state.git.baseBranch)}</p>
+  <p><strong>Status:</strong> ${escapeHtml(session?.status ?? "sem sessao")}</p>
+  <p><strong>Arquivos alterados:</strong> ${state.git.changedFiles.length}</p>
+</body>
+</html>`;
+  }
+};
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+// src/extension.ts
+function activate(context) {
+  const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+  const repository = new VscodeReviewSessionRepository(context);
+  const gitService = new GitCliService(workspaceFolder);
+  const reviewSessionService = new ReviewSessionService(repository, gitService);
+  const reviewPanel = new ReviewPanel(context, reviewSessionService);
+  context.subscriptions.push(
+    vscode2.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),
+    vscode2.commands.registerCommand("codeReview.openDashboard", () => reviewPanel.open("dashboard")),
+    vscode2.commands.registerCommand("codeReview.startReview", () => reviewPanel.startReview()),
+    vscode2.commands.registerCommand("codeReview.openPullRequest", () => reviewPanel.open("dashboard"))
+  );
+  reviewPanel.open("dashboard");
 }
 function deactivate() {
 }

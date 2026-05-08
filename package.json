@@ -14,7 +14,8 @@
   "activationEvents": [
     "onCommand:codeReview.openDashboard",
     "onCommand:codeReview.startReview",
-    "onCommand:codeReview.openPullRequest"
+    "onCommand:codeReview.openPullRequest",
+    "onView:codeReview.sidebar"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -31,6 +32,35 @@
         "command": "codeReview.openPullRequest",
         "title": "Code Review: Abrir Pull Request"
       }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeReview",
+          "title": "Code Review",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codeReview": [
+        {
+          "id": "codeReview.sidebar",
+          "name": "Resumo"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codeReview.openDashboard",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r"
+      },
+      {
+        "command": "codeReview.startReview",
+        "key": "ctrl+alt+shift+r",
+        "mac": "cmd+alt+shift+r"
+      }
     ]
   },
   "scripts": {
@@ -41,6 +71,7 @@
     "watch": "npm run watch:extension",
     "watch:extension": "node esbuild.mjs --watch",
     "watch:webview": "npm --prefix webview-ui run build -- --watch",
+    "test": "node --test test/*.test.mjs",
     "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
     "install:webview": "npm --prefix webview-ui install",
     "clean": "rm -rf dist webview-ui/dist node_modules webview-ui/node_modules package-lock.json webview-ui/package-lock.json"

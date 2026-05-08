@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AlertTriangle,
@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
+const vscodeApi = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : undefined;
+
 const colors = {
   purple: '#7c4dff',
   green: '#4ade80',
@@ -28,7 +30,9 @@ const colors = {
   blue: '#3b82f6'
 };
 
-function ReviewLeftbar({ view, setView }) {
+function ReviewLeftbar({ view, setView, state }) {
+  const session = state?.currentSession;
+  const git = state?.git;
   const nav = [
     ['dashboard', Home, 'Dashboard', '82'],
     ['analysis', AlertTriangle, 'Diagnósticos', '25'],
@@ -50,8 +54,8 @@ function ReviewLeftbar({ view, setView }) {
 
       <section className="review-state">
         <span>Revisão atual</span>
-        <strong>PR #42 · Em análise</strong>
-        <div className="progress"><i style={{ width: '82%' }} /></div>
+        <strong>{session ? `${session.sourceBranch} · ${session.status}` : `${git?.currentBranch ?? 'sem branch'} · sem sessão`}</strong>
+        <div className="progress"><i style={{ width: session ? '82%' : '18%' }} /></div>
       </section>
 
       <nav className="nav-list">
@@ -86,7 +90,7 @@ function RuleItem({ color, label, count }) {
   );
 }
 
-function ReviewCenter({ view }) {
+function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'telemetry') return <TelemetryCenter />;
   if (view === 'history') return <HistoryCenter />;
   if (view === 'settings') return <SettingsCenter />;
@@ -98,11 +102,11 @@ function ReviewCenter({ view }) {
         <div>
           <span className="eyebrow">Análise da revisão</span>
           <h1>{view === 'dashboard' ? 'Dashboard de qualidade' : 'Diagnósticos encontrados'}</h1>
-          <p>Resumo da revisão sem recriar Explorer, editor, tabs ou statusbar do VS Code.</p>
+          <p>{state?.git ? `${state.git.currentBranch} para ${state.git.baseBranch}` : 'Resumo da revisão sem recriar Explorer, editor, tabs ou statusbar do VS Code.'}</p>
         </div>
         <div className="header-actions">
-          <button><RefreshCw size={16} /> Atualizar</button>
-          <button className="primary"><Play size={16} /> Executar revisão</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button>
+          <button className="primary" onClick={onStartReview}><Play size={16} /> Executar revisão</button>
         </div>
       </header>
 
@@ -117,7 +121,7 @@ function ReviewCenter({ view }) {
         <div className="workspace-main">
           <h2>Arquivos e achados da revisão</h2>
           <p className="muted">Use o editor real do VS Code para abrir o arquivo, diff e comentários. Esta área mostra apenas o resumo navegável.</p>
-          <FindingsTable />
+          <FindingsTable changedFiles={state?.git?.changedFiles} />
         </div>
 
         <aside className="workspace-side">
@@ -145,8 +149,14 @@ function SummaryCard({ title, value, label, color }) {
   );
 }
 
-function FindingsTable() {
-  const rows = [
+function FindingsTable({ changedFiles = [] }) {
+  const rows = changedFiles.length ? changedFiles.slice(0, 5).map((file, index) => [
+    index === 0 ? 'Sugestão' : 'Conforme',
+    'Git diff',
+    file,
+    '-',
+    'Arquivo alterado'
+  ]) : [
     ['Crítico', 'SOLID/DIP', 'UserService.ts', '11', 'Ajuste obrigatório'],
     ['Aviso', 'SRP', 'UserService.ts', '16', 'Separar responsabilidades'],
     ['Erro', 'Error Handling', 'UserService.ts', '24', 'Padronizar retorno'],
@@ -322,11 +332,30 @@ function SimpleCenter({ title, subtitle }) {
 function App() {
   const initialView = document.body?.dataset?.initialView || 'dashboard';
   const [view, setView] = useState(initialView);
+  const [state, setState] = useState();
+
+  useEffect(() => {
+    const listener = (event) => {
+      if (event.data?.type === 'dashboardState') {
+        setState(event.data.payload);
+      }
+
+      if (event.data?.type === 'reviewSessionStarted') {
+        setState((current) => ({ ...current, currentSession: event.data.payload }));
+      }
+    };
+
+    window.addEventListener('message', listener);
+    vscodeApi?.postMessage({ type: 'requestState' });
+    return () => window.removeEventListener('message', listener);
+  }, []);
+
+  const startReview = useMemo(() => () => vscodeApi?.postMessage({ type: 'startReview' }), []);
 
   return (
     <div className="app-shell">
-      <ReviewLeftbar view={view} setView={setView} />
-      <ReviewCenter view={view} />
+      <ReviewLeftbar view={view} setView={setView} state={state} />
+      <ReviewCenter view={view} state={state} onStartReview={startReview} />
       <Rightbar />
     </div>
   );

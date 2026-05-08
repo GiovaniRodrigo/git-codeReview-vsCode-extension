@@ -33,32 +33,32 @@ Construir a base estrutural da extensão.
 
 ### Integração VS Code
 
-* [ ] Inicialização da extensão
-* [ ] Sidebar principal
-* [ ] Registro de comandos
-* [ ] Atalhos padrão
-* [ ] Webview principal
-* [ ] Persistência local
+* [x] Inicialização da extensão
+* [x] Sidebar principal
+* [x] Registro de comandos
+* [x] Atalhos padrão
+* [x] Webview principal
+* [x] Persistência local
 
 ---
 
 ### Integração Git
 
-* [ ] Leitura de branch atual
+* [x] Leitura de branch atual
 * [ ] Identificação de PR
-* [ ] Comparação de diffs
-* [ ] Navegação por commits
-* [ ] Navegação por arquivos alterados
+* [~] Comparação de diffs
+* [~] Navegação por commits
+* [~] Navegação por arquivos alterados
 
 ---
 
 ### Estrutura Base
 
-* [ ] Arquitetura modular
-* [ ] Separação frontend/backend
-* [ ] Sistema de eventos
-* [ ] Sistema de estado
-* [ ] Configuração inicial
+* [x] Arquitetura modular
+* [x] Separação frontend/backend
+* [x] Sistema de eventos
+* [x] Sistema de estado
+* [x] Configuração inicial
 
 ---
 
@@ -74,7 +74,7 @@ Permitir criação e gerenciamento de sessões de revisão.
 
 ### Sessões de Review
 
-* [ ] Criar review session
+* [x] Criar review session
 * [ ] Abrir review existente
 * [ ] Listar reviews
 * [ ] Timeline da revisão
