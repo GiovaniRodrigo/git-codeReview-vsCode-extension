@@ -364,6 +364,94 @@ function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Da
   };
 }
 
+// src/telemetry/reviewMetrics.ts
+function calculateReviewMetrics(sessions) {
+  const findings = sessions.flatMap((session) => session.findings ?? []);
+  const findingsCount = findings.length;
+  const criticalCount = findings.filter((finding) => finding.severity === "CRITICAL").length;
+  const highCount = findings.filter((finding) => finding.severity === "HIGH").length;
+  const reopenedCount = findings.filter((finding) => finding.statusHistory.some((entry) => entry.status === "REOPENED")).length;
+  const correctionsCount = findings.reduce((total, finding) => total + finding.correctionAttempts.length, 0);
+  const approvalsCount = findings.filter((finding) => finding.status === "APPROVED").length;
+  const recurrenceRate = findingsCount ? round(countRecurringRules(findings) / findingsCount * 100) : 0;
+  const averageCorrectionHours = averageCorrectionTime(findings);
+  const eventsCount = sessions.reduce((total, session) => total + session.history.length, 0);
+  return {
+    qualityScore: calculateQualityScore(findings),
+    findingsCount,
+    criticalCount,
+    highCount,
+    reopenedCount,
+    recurrenceRate,
+    averageCorrectionHours,
+    approvalsCount,
+    correctionsCount,
+    eventsCount,
+    ruleFrequency: frequency(findings.map((finding) => finding.rule)),
+    reviewerCount: frequency(sessions.map((session) => session.reviewer)),
+    developerCount: frequency(findings.map((finding) => finding.responsible)),
+    timeline: buildTimeline(findings)
+  };
+}
+function calculateQualityScore(findings) {
+  const penalty = findings.reduce((total, finding) => {
+    const severityPenalty = finding.severity === "CRITICAL" ? 22 : finding.severity === "HIGH" ? 14 : finding.severity === "MEDIUM" ? 7 : 3;
+    const statusRelief = finding.status === "APPROVED" ? 0.2 : finding.status === "FIXED" ? 0.5 : 1;
+    const reopenPenalty = finding.statusHistory.filter((entry) => entry.status === "REOPENED").length * 5;
+    return total + severityPenalty * statusRelief + reopenPenalty;
+  }, 0);
+  return Math.max(0, Math.min(100, Math.round(100 - penalty)));
+}
+function countRecurringRules(findings) {
+  const counts = /* @__PURE__ */ new Map();
+  findings.forEach((finding) => counts.set(finding.rule, (counts.get(finding.rule) ?? 0) + 1));
+  return findings.filter((finding) => (counts.get(finding.rule) ?? 0) > 1).length;
+}
+function averageCorrectionTime(findings) {
+  const durations = findings.flatMap((finding) => {
+    const createdAt = Date.parse(finding.createdAt);
+    return finding.correctionAttempts.map((attempt) => Date.parse(attempt.createdAt) - createdAt).filter((duration) => Number.isFinite(duration) && duration >= 0);
+  });
+  if (!durations.length) return 0;
+  const averageMs = durations.reduce((total, duration) => total + duration, 0) / durations.length;
+  return round(averageMs / 1e3 / 60 / 60);
+}
+function frequency(values) {
+  const counts = /* @__PURE__ */ new Map();
+  values.filter(Boolean).forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+  return Array.from(counts.entries()).map(([rule, count]) => ({ rule, count })).sort((a, b) => b.count - a.count || a.rule.localeCompare(b.rule));
+}
+function buildTimeline(findings) {
+  const byDate = /* @__PURE__ */ new Map();
+  findings.forEach((finding) => {
+    const createdDate = toDateKey(finding.createdAt);
+    const createdBucket = getTimelineBucket(byDate, createdDate);
+    createdBucket.findings += 1;
+    finding.correctionAttempts.forEach((attempt) => {
+      getTimelineBucket(byDate, toDateKey(attempt.createdAt)).corrections += 1;
+    });
+    finding.revalidations.forEach((revalidation) => {
+      const bucket = getTimelineBucket(byDate, toDateKey(revalidation.createdAt));
+      if (revalidation.result === "APPROVED") bucket.approvals += 1;
+      if (revalidation.result === "REOPENED") bucket.reopenings += 1;
+    });
+  });
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+function getTimelineBucket(map, date) {
+  const existing = map.get(date);
+  if (existing) return existing;
+  const bucket = { date, findings: 0, corrections: 0, approvals: 0, reopenings: 0 };
+  map.set(date, bucket);
+  return bucket;
+}
+function toDateKey(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+function round(value) {
+  return Math.round(value * 10) / 10;
+}
+
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
   constructor(repository, gitService) {
@@ -376,7 +464,7 @@ var ReviewSessionService = class {
       this.gitService.getContext(),
       this.repository.list()
     ]);
-    return { currentSession, git: git2, sessions };
+    return { currentSession, git: git2, sessions, metrics: calculateReviewMetrics(sessions) };
   }
   async startReview(author, reviewer) {
     const git2 = await this.gitService.getContext();

@@ -97,7 +97,7 @@ function RuleItem({ color, label, count }) {
 }
 
 function ReviewCenter({ view, state, onStartReview }) {
-  if (view === 'telemetry') return <TelemetryCenter />;
+  if (view === 'telemetry') return <TelemetryCenter state={state} />;
   if (view === 'history') return <HistoryCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
   if (view === 'settings') return <SettingsCenter />;
@@ -124,10 +124,10 @@ function ReviewCenter({ view, state, onStartReview }) {
       {!state && <SkeletonPanel />}
 
       <section className="summary-grid">
-        <SummaryCard title="Score" value="82/100" label="Muito bom" color="green" />
-        <SummaryCard title="Violações" value="25" label="-12 desde última revisão" color="red" />
-        <SummaryCard title="Conformidades" value="68" label="+12 novas regras OK" color="green" />
-        <SummaryCard title="Cobertura" value="94%" label="regras avaliadas" color="blue" />
+        <SummaryCard title="Score" value={`${state?.metrics?.qualityScore ?? 100}/100`} label="qualidade atual" color="green" />
+        <SummaryCard title="Violações" value={String(state?.metrics?.findingsCount ?? 0)} label={`${state?.metrics?.criticalCount ?? 0} críticas`} color="red" />
+        <SummaryCard title="Correções" value={String(state?.metrics?.correctionsCount ?? 0)} label="tentativas registradas" color="green" />
+        <SummaryCard title="Reincidência" value={`${state?.metrics?.recurrenceRate ?? 0}%`} label="regras repetidas" color="blue" />
       </section>
 
       <section className="review-workspace">
@@ -548,7 +548,7 @@ function StatusControls({ session }) {
   );
 }
 
-function Rightbar() {
+function Rightbar({ metrics }) {
   return (
     <aside className="rightbar">
       <header>
@@ -558,14 +558,14 @@ function Rightbar() {
 
       <section className="quality-card">
         <h4>Score de Qualidade</h4>
-        <Ring />
-        <strong>Muito Bom</strong>
+        <Ring score={metrics?.qualityScore ?? 100} />
+        <strong>{qualityLabel(metrics?.qualityScore ?? 100)}</strong>
       </section>
 
       <section className="kpi-stack">
-        <Metric title="Conformidades" value="68" color="green" />
-        <Metric title="Violações" value="25" color="red" />
-        <Metric title="Cobertura de Regras" value="94%" color="green" bar />
+        <Metric title="Findings" value={String(metrics?.findingsCount ?? 0)} color="red" />
+        <Metric title="Reaberturas" value={String(metrics?.reopenedCount ?? 0)} color="yellow" />
+        <Metric title="Reincidência" value={`${metrics?.recurrenceRate ?? 0}%`} color="green" bar />
       </section>
 
       <section>
@@ -593,10 +593,11 @@ function Rightbar() {
   );
 }
 
-function Ring() {
+function Ring({ score = 100 }) {
+  const clamped = Math.max(0, Math.min(100, score));
   return (
-    <div className="ring" style={{ background: `conic-gradient(${colors.green} 0 45%, ${colors.yellow} 45% 76%, ${colors.red} 76% 82%, #253044 82% 100%)` }}>
-      <div><b>82</b><small>/100</small></div>
+    <div className="ring" style={{ background: `conic-gradient(${colors.green} 0 ${clamped}%, #253044 ${clamped}% 100%)` }}>
+      <div><b>{clamped}</b><small>/100</small></div>
     </div>
   );
 }
@@ -621,8 +622,66 @@ function Issue({ icon, title, text, label }) {
   );
 }
 
-function TelemetryCenter() {
-  return <SimpleCenter title="Telemetria de engenharia" subtitle="Reincidências, regras mais violadas, tempo médio de correção e evolução por PR." />;
+function TelemetryCenter({ state }) {
+  const metrics = state?.metrics ?? {};
+  const timeline = metrics.timeline ?? [];
+  const rules = metrics.ruleFrequency ?? [];
+  const reviewers = metrics.reviewerCount ?? [];
+  const developers = metrics.developerCount ?? [];
+
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div><span className="eyebrow">Telemetria</span><h1>Dashboards de qualidade</h1><p>Reincidências, regras mais violadas, tempo médio de correção e evolução por PR.</p></div>
+      </header>
+      <section className="summary-grid">
+        <SummaryCard title="Score" value={`${metrics.qualityScore ?? 100}/100`} label={qualityLabel(metrics.qualityScore ?? 100)} color="green" />
+        <SummaryCard title="Findings" value={String(metrics.findingsCount ?? 0)} label={`${metrics.criticalCount ?? 0} críticos`} color="red" />
+        <SummaryCard title="Tempo médio" value={`${metrics.averageCorrectionHours ?? 0}h`} label="correção" color="yellow" />
+        <SummaryCard title="Eventos" value={String(metrics.eventsCount ?? 0)} label="telemetria local" color="blue" />
+      </section>
+      <section className="dashboard-grid">
+        <TelemetryPanel title="Dashboard arquitetural" items={rules} empty="Nenhuma regra violada." />
+        <TelemetryPanel title="Por reviewer" items={reviewers} empty="Nenhum reviewer registrado." />
+        <TelemetryPanel title="Por desenvolvedor" items={developers} empty="Nenhum responsável registrado." />
+      </section>
+      <section className="sessions-panel">
+        <div className="section-title">
+          <div>
+            <h2>Histórico temporal</h2>
+            <p className="muted">Findings, correções, aprovações e reaberturas por dia.</p>
+          </div>
+        </div>
+        <div className="timeline-chart">
+          {timeline.length ? timeline.map((item) => (
+            <div key={item.date}>
+              <span>{item.date.slice(5)}</span>
+              <i style={{ height: `${Math.max(8, item.findings * 16)}px` }} />
+              <i className="green" style={{ height: `${Math.max(8, item.corrections * 16)}px` }} />
+              <i className="blue" style={{ height: `${Math.max(8, item.approvals * 16)}px` }} />
+              <i className="red" style={{ height: `${Math.max(8, item.reopenings * 16)}px` }} />
+            </div>
+          )) : <p className="empty-state">Sem histórico temporal ainda.</p>}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function TelemetryPanel({ title, items = [], empty }) {
+  return (
+    <section className="sessions-panel">
+      <div className="section-title"><h2>{title}</h2></div>
+      <div className="telemetry-list">
+        {items.length ? items.slice(0, 6).map((item) => (
+          <div key={item.rule}>
+            <span>{item.rule}</span>
+            <b>{item.count}</b>
+          </div>
+        )) : <p className="empty-state">{empty}</p>}
+      </div>
+    </section>
+  );
 }
 function HistoryCenter({ state }) {
   return (
@@ -713,10 +772,17 @@ function App() {
     <div className="app-shell">
       <ReviewLeftbar view={view} setView={setView} state={state} />
       <ReviewCenter view={view} state={state} onStartReview={startReview} />
-      <Rightbar />
+      <Rightbar metrics={state?.metrics} />
       {snackbar && <div className="snackbar" role="status">{snackbar}</div>}
     </div>
   );
+}
+
+function qualityLabel(score) {
+  if (score >= 85) return 'Muito bom';
+  if (score >= 70) return 'Bom';
+  if (score >= 50) return 'Atenção';
+  return 'Crítico';
 }
 
 createRoot(document.getElementById('root')).render(<App />);

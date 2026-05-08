@@ -194,31 +194,31 @@ Registrar dados de qualidade arquitetural.
 
 ### Métricas
 
-* [ ] Score de qualidade
-* [ ] Frequência de erros
-* [ ] Taxa de reincidência
-* [ ] Tempo médio de correção
-* [ ] Quantidade de findings
+* [x] Score de qualidade
+* [x] Frequência de erros
+* [x] Taxa de reincidência
+* [x] Tempo médio de correção
+* [x] Quantidade de findings
 
 ---
 
 ### Dashboards
 
-* [ ] Dashboard geral
-* [ ] Dashboard arquitetural
-* [ ] Dashboard por reviewer
-* [ ] Dashboard por desenvolvedor
-* [ ] Histórico temporal
+* [x] Dashboard geral
+* [x] Dashboard arquitetural
+* [x] Dashboard por reviewer
+* [x] Dashboard por desenvolvedor
+* [x] Histórico temporal
 
 ---
 
 ### Coleta de Dados
 
-* [ ] Eventos de validação
-* [ ] Eventos de correção
-* [ ] Eventos de aprovação
-* [ ] Eventos de reabertura
-* [ ] Persistência analítica
+* [x] Eventos de validação
+* [x] Eventos de correção
+* [x] Eventos de aprovação
+* [x] Eventos de reabertura
+* [x] Persistência analítica
 
 ---
 

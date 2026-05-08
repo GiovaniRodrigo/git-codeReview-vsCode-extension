@@ -16,6 +16,7 @@ import {
   updateReviewSessionGitContext,
   updateReviewSessionStatus
 } from '../domain/reviewSession';
+import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
 
 export interface ReviewSessionRepository {
   getCurrent(): Promise<ReviewSession | undefined>;
@@ -34,14 +35,14 @@ export class ReviewSessionService {
     private readonly gitService: GitService
   ) {}
 
-  async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[] }> {
+  async getDashboardState(): Promise<{ currentSession?: ReviewSession; git: GitContext; sessions: ReviewSession[]; metrics: ReviewMetrics }> {
     const [currentSession, git, sessions] = await Promise.all([
       this.repository.getCurrent(),
       this.gitService.getContext(),
       this.repository.list()
     ]);
 
-    return { currentSession, git, sessions };
+    return { currentSession, git, sessions, metrics: calculateReviewMetrics(sessions) };
   }
 
   async startReview(author: string, reviewer: string): Promise<ReviewSession> {
