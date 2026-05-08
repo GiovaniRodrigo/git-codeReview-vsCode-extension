@@ -139,6 +139,7 @@ function ReviewCenter({ view, state, onStartReview }) {
       <ReviewSessionsPanel sessions={state?.sessions} currentSession={state?.currentSession} />
       <NavigationPanel session={state?.currentSession} git={state?.git} />
       <CommentsPanel session={state?.currentSession} />
+      <ValidationFindingsPanel session={state?.currentSession} git={state?.git} />
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -235,6 +236,108 @@ function CommentsPanel({ session }) {
         )) : <p className="empty-state">Nenhum comentário registrado nesta sessão.</p>}
       </div>
     </section>
+  );
+}
+
+function ValidationFindingsPanel({ session, git }) {
+  const [rule, setRule] = useState('DIP');
+  const [severity, setSeverity] = useState('HIGH');
+  const [description, setDescription] = useState('Dependência concreta detectada na camada de aplicação.');
+  const [line, setLine] = useState(1);
+  const file = session?.changedFiles?.[0] ?? git?.changedFiles?.[0] ?? 'src/extension.ts';
+  const commit = session?.commits?.[0] ?? git?.commits?.[0] ?? 'HEAD';
+
+  const createFinding = () => {
+    if (!session || !description.trim()) return;
+    vscodeApi?.postMessage({
+      type: 'createValidationFinding',
+      payload: {
+        id: session.id,
+        rule,
+        severity,
+        description,
+        file,
+        line: Number(line) || 1,
+        commit
+      }
+    });
+  };
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Validações</h2>
+          <p className="muted">Findings com severidade, status, correções e revalidação.</p>
+        </div>
+      </div>
+      <div className="finding-form">
+        <select value={rule} onChange={(event) => setRule(event.target.value)}>
+          <option>DIP</option>
+          <option>SRP</option>
+          <option>Clean Architecture</option>
+          <option>DDD</option>
+          <option>Performance</option>
+        </select>
+        <select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+          <option>LOW</option>
+          <option>MEDIUM</option>
+          <option>HIGH</option>
+          <option>CRITICAL</option>
+        </select>
+        <input type="number" min="1" value={line} onChange={(event) => setLine(event.target.value)} />
+        <input value={description} onChange={(event) => setDescription(event.target.value)} />
+        <button disabled={!session || !description.trim()} onClick={createFinding}><ListChecks size={16} /> Criar</button>
+      </div>
+      <div className="findings-list">
+        {session?.findings?.length ? session.findings.map((finding) => (
+          <FindingItem key={finding.id} session={session} finding={finding} />
+        )) : <p className="empty-state">Nenhuma validação registrada nesta sessão.</p>}
+      </div>
+    </section>
+  );
+}
+
+function FindingItem({ session, finding }) {
+  const correctionCommit = session.commits?.[0] ?? 'HEAD';
+
+  return (
+    <article className="finding-item">
+      <header>
+        <div>
+          <strong>{finding.rule}</strong>
+          <small>{finding.file}:{finding.line} · {finding.commit}</small>
+        </div>
+        <Severity label={finding.severity === 'CRITICAL' ? 'Crítico' : finding.severity === 'HIGH' ? 'Erro' : finding.severity === 'MEDIUM' ? 'Aviso' : 'Sugestão'} />
+      </header>
+      <p>{finding.description}</p>
+      <div className="finding-actions">
+        {['NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'].map((status) => (
+          <button
+            key={status}
+            className={finding.status === status ? 'active' : ''}
+            onClick={() => vscodeApi?.postMessage({ type: 'updateValidationFindingStatus', payload: { id: session.id, findingId: finding.id, status } })}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+      <div className="finding-actions">
+        <button onClick={() => vscodeApi?.postMessage({
+          type: 'registerCorrectionAttempt',
+          payload: { id: session.id, findingId: finding.id, commit: correctionCommit, description: 'Correção registrada pelo responsável.' }
+        })}>Registrar correção</button>
+        <button onClick={() => vscodeApi?.postMessage({
+          type: 'revalidateFinding',
+          payload: { id: session.id, findingId: finding.id, result: 'APPROVED', notes: 'Revalidação aprovada.' }
+        })}>Aprovar revalidação</button>
+        <button onClick={() => vscodeApi?.postMessage({
+          type: 'revalidateFinding',
+          payload: { id: session.id, findingId: finding.id, result: 'REOPENED', notes: 'Reaberto após nova análise.' }
+        })}>Reabrir</button>
+      </div>
+      <small>{finding.statusHistory.length} mudanças · {finding.correctionAttempts.length} correções · {finding.revalidations.length} revalidações</small>
+    </article>
   );
 }
 

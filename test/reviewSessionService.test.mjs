@@ -79,6 +79,36 @@ test('adds and edits comments through the application layer', async () => {
   assert.equal(updated.comments[0].history.length, 1);
 });
 
+test('manages validation findings correction and revalidation through the application layer', async () => {
+  const service = new ReviewSessionService(new MemoryReviewSessionRepository(), new StaticGitService(git));
+  const session = await service.startReview('Developer', 'Reviewer');
+  const withFinding = await service.createFinding(session.id, {
+    rule: 'DIP',
+    severity: 'CRITICAL',
+    description: 'Dependencia concreta na aplicacao.',
+    file: 'src/extension.ts',
+    line: 10,
+    commit: 'abc123',
+    responsible: 'Developer'
+  });
+  const findingId = withFinding.findings[0].id;
+
+  const fixed = await service.registerCorrection(session.id, findingId, {
+    author: 'Developer',
+    commit: 'def456',
+    description: 'Inversao aplicada.'
+  });
+  const approved = await service.revalidate(session.id, findingId, {
+    reviewer: 'Reviewer',
+    result: 'APPROVED',
+    notes: 'Correção validada.'
+  });
+
+  assert.equal(fixed.findings[0].status, 'FIXED');
+  assert.equal(approved.findings[0].status, 'APPROVED');
+  assert.equal(approved.findings[0].correctionAttempts.length, 1);
+});
+
 class StaticGitService {
   constructor(context) {
     this.context = context;

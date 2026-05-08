@@ -9,9 +9,25 @@ export const REVIEW_SESSION_STATUSES = [
 
 export type ReviewSessionStatus = (typeof REVIEW_SESSION_STATUSES)[number];
 
+export const VALIDATION_FINDING_STATUSES = ['NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'] as const;
+export const VALIDATION_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+
+export type ValidationFindingStatus = (typeof VALIDATION_FINDING_STATUSES)[number];
+export type ValidationSeverity = (typeof VALIDATION_SEVERITIES)[number];
+
 export interface ReviewHistoryEntry {
   id: string;
-  type: 'SESSION_CREATED' | 'STATUS_CHANGED' | 'GIT_CONTEXT_REFRESHED' | 'NAVIGATION_CHANGED' | 'COMMENT_ADDED' | 'COMMENT_EDITED';
+  type:
+    | 'SESSION_CREATED'
+    | 'STATUS_CHANGED'
+    | 'GIT_CONTEXT_REFRESHED'
+    | 'NAVIGATION_CHANGED'
+    | 'COMMENT_ADDED'
+    | 'COMMENT_EDITED'
+    | 'FINDING_CREATED'
+    | 'FINDING_STATUS_CHANGED'
+    | 'CORRECTION_REGISTERED'
+    | 'FINDING_REVALIDATED';
   message: string;
   createdAt: string;
 }
@@ -44,6 +60,40 @@ export interface ReviewComment {
   history: ReviewCommentVersion[];
 }
 
+export interface ValidationFinding {
+  id: string;
+  rule: string;
+  severity: ValidationSeverity;
+  status: ValidationFindingStatus;
+  description: string;
+  file: string;
+  line: number;
+  commit: string;
+  responsible: string;
+  createdAt: string;
+  updatedAt: string;
+  comments: string[];
+  statusHistory: Array<{ status: ValidationFindingStatus; changedAt: string; reason?: string }>;
+  correctionAttempts: CorrectionAttempt[];
+  revalidations: Revalidation[];
+}
+
+export interface CorrectionAttempt {
+  id: string;
+  author: string;
+  commit: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface Revalidation {
+  id: string;
+  reviewer: string;
+  result: ValidationFindingStatus;
+  notes: string;
+  createdAt: string;
+}
+
 export interface GitContext {
   currentBranch: string;
   baseBranch: string;
@@ -66,6 +116,7 @@ export interface ReviewSession {
   commits: string[];
   activeNavigation?: ReviewNavigationTarget;
   comments: ReviewComment[];
+  findings: ValidationFinding[];
   history: ReviewHistoryEntry[];
 }
 
@@ -114,6 +165,7 @@ export function createReviewSession(input: CreateReviewSessionInput): ReviewSess
     changedFiles: input.git.changedFiles,
     commits: input.git.commits,
     comments: [],
+    findings: [],
     history: [
       {
         id: `${id}-created`,
@@ -122,6 +174,146 @@ export function createReviewSession(input: CreateReviewSessionInput): ReviewSess
         createdAt: now
       }
     ]
+  };
+}
+
+export interface CreateValidationFindingInput {
+  rule: string;
+  severity: ValidationSeverity;
+  description: string;
+  file: string;
+  line: number;
+  commit: string;
+  responsible: string;
+  now?: Date;
+  id?: string;
+}
+
+export function isValidationFindingStatus(value: string): value is ValidationFindingStatus {
+  return VALIDATION_FINDING_STATUSES.includes(value as ValidationFindingStatus);
+}
+
+export function isValidationSeverity(value: string): value is ValidationSeverity {
+  return VALIDATION_SEVERITIES.includes(value as ValidationSeverity);
+}
+
+export function createValidationFinding(session: ReviewSession, input: CreateValidationFindingInput): ReviewSession {
+  validateFindingInput(input);
+
+  const findings = session.findings ?? [];
+  const createdAt = (input.now ?? new Date()).toISOString();
+  const id = input.id ?? `${session.id}-finding-${findings.length + 1}`;
+  const finding: ValidationFinding = {
+    id,
+    rule: input.rule.trim(),
+    severity: input.severity,
+    status: 'NEEDS_CHANGES',
+    description: input.description.trim(),
+    file: input.file.trim(),
+    line: input.line,
+    commit: input.commit.trim(),
+    responsible: input.responsible.trim(),
+    createdAt,
+    updatedAt: createdAt,
+    comments: [],
+    statusHistory: [{ status: 'NEEDS_CHANGES', changedAt: createdAt }],
+    correctionAttempts: [],
+    revalidations: []
+  };
+
+  return {
+    ...session,
+    findings: [...findings, finding],
+    updatedAt: createdAt,
+    history: appendHistory(session, 'FINDING_CREATED', `Validacao criada: ${finding.rule} em ${finding.file}:${finding.line}`, createdAt)
+  };
+}
+
+export function updateValidationFindingStatus(
+  session: ReviewSession,
+  findingId: string,
+  status: ValidationFindingStatus,
+  reason = '',
+  now = new Date()
+): ReviewSession {
+  const { finding, findings } = findFinding(session, findingId);
+  const updatedAt = now.toISOString();
+
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status,
+      updatedAt,
+      statusHistory: [...item.statusHistory, { status, changedAt: updatedAt, reason: reason || undefined }]
+    } : item),
+    updatedAt,
+    history: appendHistory(session, 'FINDING_STATUS_CHANGED', `Status da validacao ${finding.rule} alterado para ${status}`, updatedAt)
+  };
+}
+
+export function registerCorrectionAttempt(
+  session: ReviewSession,
+  findingId: string,
+  input: { author: string; commit: string; description: string; now?: Date; id?: string }
+): ReviewSession {
+  if (!input.author.trim()) throw new Error('O autor da correcao e obrigatorio.');
+  if (!input.commit.trim()) throw new Error('O commit da correcao e obrigatorio.');
+  if (!input.description.trim()) throw new Error('A descricao da correcao e obrigatoria.');
+
+  const { finding, findings } = findFinding(session, findingId);
+  const createdAt = (input.now ?? new Date()).toISOString();
+  const attempt: CorrectionAttempt = {
+    id: input.id ?? `${findingId}-correction-${finding.correctionAttempts.length + 1}`,
+    author: input.author.trim(),
+    commit: input.commit.trim(),
+    description: input.description.trim(),
+    createdAt
+  };
+
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status: 'FIXED',
+      updatedAt: createdAt,
+      correctionAttempts: [...item.correctionAttempts, attempt],
+      statusHistory: [...item.statusHistory, { status: 'FIXED', changedAt: createdAt, reason: 'Correcao registrada' }]
+    } : item),
+    updatedAt: createdAt,
+    history: appendHistory(session, 'CORRECTION_REGISTERED', `Correcao registrada para ${finding.rule}`, createdAt)
+  };
+}
+
+export function revalidateFinding(
+  session: ReviewSession,
+  findingId: string,
+  input: { reviewer: string; result: ValidationFindingStatus; notes: string; now?: Date; id?: string }
+): ReviewSession {
+  if (!input.reviewer.trim()) throw new Error('O reviewer da revalidacao e obrigatorio.');
+  if (!input.notes.trim()) throw new Error('As notas da revalidacao sao obrigatorias.');
+
+  const { finding, findings } = findFinding(session, findingId);
+  const createdAt = (input.now ?? new Date()).toISOString();
+  const revalidation: Revalidation = {
+    id: input.id ?? `${findingId}-revalidation-${finding.revalidations.length + 1}`,
+    reviewer: input.reviewer.trim(),
+    result: input.result,
+    notes: input.notes.trim(),
+    createdAt
+  };
+
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status: input.result,
+      updatedAt: createdAt,
+      revalidations: [...item.revalidations, revalidation],
+      statusHistory: [...item.statusHistory, { status: input.result, changedAt: createdAt, reason: 'Revalidacao' }]
+    } : item),
+    updatedAt: createdAt,
+    history: appendHistory(session, 'FINDING_REVALIDATED', `Validacao revalidada: ${finding.rule} -> ${input.result}`, createdAt)
   };
 }
 
@@ -264,6 +456,43 @@ export function navigateReviewSession(
       }
     ]
   };
+}
+
+function validateFindingInput(input: CreateValidationFindingInput): void {
+  if (!input.rule.trim()) throw new Error('A regra violada e obrigatoria.');
+  if (!input.description.trim()) throw new Error('A descricao da validacao e obrigatoria.');
+  if (!input.file.trim()) throw new Error('O arquivo da validacao e obrigatorio.');
+  if (!Number.isInteger(input.line) || input.line < 1) throw new Error('A linha da validacao deve ser maior que zero.');
+  if (!input.commit.trim()) throw new Error('O commit da validacao e obrigatorio.');
+  if (!input.responsible.trim()) throw new Error('O responsavel da validacao e obrigatorio.');
+}
+
+function findFinding(session: ReviewSession, findingId: string): { finding: ValidationFinding; findings: ValidationFinding[] } {
+  const findings = session.findings ?? [];
+  const finding = findings.find((item) => item.id === findingId);
+
+  if (!finding) {
+    throw new Error(`Validacao nao encontrada: ${findingId}`);
+  }
+
+  return { finding, findings };
+}
+
+function appendHistory(
+  session: ReviewSession,
+  type: ReviewHistoryEntry['type'],
+  message: string,
+  createdAt: string
+): ReviewHistoryEntry[] {
+  return [
+    ...session.history,
+    {
+      id: `${session.id}-history-${session.history.length + 1}`,
+      type,
+      message,
+      createdAt
+    }
+  ];
 }
 
 export function updateReviewSessionGitContext(

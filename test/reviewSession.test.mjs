@@ -15,8 +15,11 @@ await esbuild.build({
 const {
   addReviewComment,
   createReviewSession,
+  createValidationFinding,
   editReviewComment,
   navigateReviewSession,
+  registerCorrectionAttempt,
+  revalidateFinding,
   updateReviewSessionGitContext
 } = await import('../.tmp-tests/reviewSession.mjs');
 
@@ -129,4 +132,80 @@ test('stores navigation target in the review session history', () => {
   assert.equal(updated.activeNavigation.kind, 'file');
   assert.equal(updated.activeNavigation.ref, 'src/extension.ts');
   assert.equal(updated.history.at(-1).type, 'NAVIGATION_CHANGED');
+});
+
+test('creates validation findings linked to file line and commit', () => {
+  const session = createReviewSession({ git, author: 'Developer', reviewer: 'Reviewer', id: 'review-1' });
+  const updated = createValidationFinding(session, {
+    rule: 'DIP',
+    severity: 'CRITICAL',
+    description: 'Camada de aplicacao depende de implementacao concreta.',
+    file: 'src/extension.ts',
+    line: 8,
+    commit: 'abc123',
+    responsible: 'Developer',
+    id: 'finding-1'
+  });
+
+  assert.equal(updated.findings[0].status, 'NEEDS_CHANGES');
+  assert.equal(updated.findings[0].severity, 'CRITICAL');
+  assert.equal(updated.findings[0].file, 'src/extension.ts');
+  assert.equal(updated.history.at(-1).type, 'FINDING_CREATED');
+});
+
+test('registers correction attempts and keeps them linked to original finding', () => {
+  const session = createValidationFinding(
+    createReviewSession({ git, author: 'Developer', reviewer: 'Reviewer', id: 'review-1' }),
+    {
+      rule: 'SRP',
+      severity: 'HIGH',
+      description: 'Modulo com responsabilidades misturadas.',
+      file: 'src/extension.ts',
+      line: 12,
+      commit: 'abc123',
+      responsible: 'Developer',
+      id: 'finding-1'
+    }
+  );
+
+  const updated = registerCorrectionAttempt(session, 'finding-1', {
+    author: 'Developer',
+    commit: 'def456',
+    description: 'Separado caso de uso.'
+  });
+
+  assert.equal(updated.findings[0].status, 'FIXED');
+  assert.equal(updated.findings[0].correctionAttempts.length, 1);
+  assert.equal(updated.history.at(-1).type, 'CORRECTION_REGISTERED');
+});
+
+test('revalidates and reopens findings preserving status history', () => {
+  const session = createValidationFinding(
+    createReviewSession({ git, author: 'Developer', reviewer: 'Reviewer', id: 'review-1' }),
+    {
+      rule: 'Clean Architecture',
+      severity: 'MEDIUM',
+      description: 'Dependencia incorreta entre camadas.',
+      file: 'src/extension.ts',
+      line: 20,
+      commit: 'abc123',
+      responsible: 'Developer',
+      id: 'finding-1'
+    }
+  );
+
+  const approved = revalidateFinding(session, 'finding-1', {
+    reviewer: 'Reviewer',
+    result: 'APPROVED',
+    notes: 'Ajuste confirmado.'
+  });
+  const reopened = revalidateFinding(approved, 'finding-1', {
+    reviewer: 'Reviewer',
+    result: 'REOPENED',
+    notes: 'Regressao encontrada.'
+  });
+
+  assert.equal(reopened.findings[0].status, 'REOPENED');
+  assert.equal(reopened.findings[0].revalidations.length, 2);
+  assert.equal(reopened.findings[0].statusHistory.length, 3);
 });

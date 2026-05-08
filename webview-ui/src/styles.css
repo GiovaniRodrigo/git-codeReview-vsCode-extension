@@ -329,6 +329,61 @@ h1 { margin: 8px 0 6px; font-size: 28px; }
   gap: 8px;
   margin: 8px 0;
 }
+.finding-form {
+  display: grid;
+  grid-template-columns: 150px 120px 76px minmax(180px, 2fr) auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.finding-form input,
+.finding-form select {
+  min-width: 0;
+  border: 1px solid #303c4b;
+  color: #dce3ec;
+  background: #101720;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+.finding-form button,
+.finding-actions button {
+  border: 1px solid #303c4b;
+  color: #dce3ec;
+  background: #1b2531;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.finding-form button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+.findings-list { display: grid; gap: 8px; }
+.finding-item {
+  border: 1px solid #303c4b;
+  border-radius: 10px;
+  background: #1b2531;
+  padding: 12px;
+}
+.finding-item header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.finding-item strong,
+.finding-item small { display: block; }
+.finding-item small { color: #9ba7b5; margin-top: 4px; }
+.finding-item p { color: #dce3ec; margin: 10px 0; }
+.finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.finding-actions button.active {
+  border-color: #6d54d8;
+  color: #fff;
+  background: #4b32a5;
+}
 .empty-state {
   margin: 0;
   color: #9ba7b5;
@@ -488,5 +543,6 @@ tr:last-child td { border-bottom: 0; }
   .section-title { display: block; }
   .status-controls { justify-content: flex-start; margin-top: 12px; }
   .navigation-grid,
-  .comment-form { grid-template-columns: 1fr; }
+  .comment-form,
+  .finding-form { grid-template-columns: 1fr; }
 }

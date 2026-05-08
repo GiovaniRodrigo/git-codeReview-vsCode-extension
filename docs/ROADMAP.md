@@ -114,29 +114,29 @@ Registrar não conformidades e permitir revalidação.
 
 ### Validation Findings
 
-* [ ] Criar validação
-* [ ] Definir severidade
-* [ ] Definir status
-* [ ] Associar arquivo e linha
-* [ ] Associar commit
+* [x] Criar validação
+* [x] Definir severidade
+* [x] Definir status
+* [x] Associar arquivo e linha
+* [x] Associar commit
 
 ---
 
 ### Status
 
-* [ ] NEEDS_CHANGES
-* [ ] FIXED
-* [ ] APPROVED
-* [ ] REOPENED
+* [x] NEEDS_CHANGES
+* [x] FIXED
+* [x] APPROVED
+* [x] REOPENED
 
 ---
 
 ### Correções
 
-* [ ] Registrar tentativa de correção
-* [ ] Histórico de correções
-* [ ] Revalidação
-* [ ] Reabertura de finding
+* [x] Registrar tentativa de correção
+* [x] Histórico de correções
+* [x] Revalidação
+* [x] Reabertura de finding
 
 ---
 

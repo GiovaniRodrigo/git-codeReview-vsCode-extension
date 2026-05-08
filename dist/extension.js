@@ -45,6 +45,8 @@ var REVIEW_SESSION_STATUSES = [
   "APPROVED",
   "REOPENED"
 ];
+var VALIDATION_FINDING_STATUSES = ["NEEDS_CHANGES", "FIXED", "APPROVED", "REOPENED"];
+var VALIDATION_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 function isReviewSessionStatus(value) {
   return REVIEW_SESSION_STATUSES.includes(value);
 }
@@ -76,6 +78,7 @@ function createReviewSession(input) {
     changedFiles: input.git.changedFiles,
     commits: input.git.commits,
     comments: [],
+    findings: [],
     history: [
       {
         id: `${id}-created`,
@@ -84,6 +87,107 @@ function createReviewSession(input) {
         createdAt: now
       }
     ]
+  };
+}
+function isValidationFindingStatus(value) {
+  return VALIDATION_FINDING_STATUSES.includes(value);
+}
+function isValidationSeverity(value) {
+  return VALIDATION_SEVERITIES.includes(value);
+}
+function createValidationFinding(session, input) {
+  validateFindingInput(input);
+  const findings = session.findings ?? [];
+  const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const id = input.id ?? `${session.id}-finding-${findings.length + 1}`;
+  const finding = {
+    id,
+    rule: input.rule.trim(),
+    severity: input.severity,
+    status: "NEEDS_CHANGES",
+    description: input.description.trim(),
+    file: input.file.trim(),
+    line: input.line,
+    commit: input.commit.trim(),
+    responsible: input.responsible.trim(),
+    createdAt,
+    updatedAt: createdAt,
+    comments: [],
+    statusHistory: [{ status: "NEEDS_CHANGES", changedAt: createdAt }],
+    correctionAttempts: [],
+    revalidations: []
+  };
+  return {
+    ...session,
+    findings: [...findings, finding],
+    updatedAt: createdAt,
+    history: appendHistory(session, "FINDING_CREATED", `Validacao criada: ${finding.rule} em ${finding.file}:${finding.line}`, createdAt)
+  };
+}
+function updateValidationFindingStatus(session, findingId, status, reason = "", now = /* @__PURE__ */ new Date()) {
+  const { finding, findings } = findFinding(session, findingId);
+  const updatedAt = now.toISOString();
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status,
+      updatedAt,
+      statusHistory: [...item.statusHistory, { status, changedAt: updatedAt, reason: reason || void 0 }]
+    } : item),
+    updatedAt,
+    history: appendHistory(session, "FINDING_STATUS_CHANGED", `Status da validacao ${finding.rule} alterado para ${status}`, updatedAt)
+  };
+}
+function registerCorrectionAttempt(session, findingId, input) {
+  if (!input.author.trim()) throw new Error("O autor da correcao e obrigatorio.");
+  if (!input.commit.trim()) throw new Error("O commit da correcao e obrigatorio.");
+  if (!input.description.trim()) throw new Error("A descricao da correcao e obrigatoria.");
+  const { finding, findings } = findFinding(session, findingId);
+  const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const attempt = {
+    id: input.id ?? `${findingId}-correction-${finding.correctionAttempts.length + 1}`,
+    author: input.author.trim(),
+    commit: input.commit.trim(),
+    description: input.description.trim(),
+    createdAt
+  };
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status: "FIXED",
+      updatedAt: createdAt,
+      correctionAttempts: [...item.correctionAttempts, attempt],
+      statusHistory: [...item.statusHistory, { status: "FIXED", changedAt: createdAt, reason: "Correcao registrada" }]
+    } : item),
+    updatedAt: createdAt,
+    history: appendHistory(session, "CORRECTION_REGISTERED", `Correcao registrada para ${finding.rule}`, createdAt)
+  };
+}
+function revalidateFinding(session, findingId, input) {
+  if (!input.reviewer.trim()) throw new Error("O reviewer da revalidacao e obrigatorio.");
+  if (!input.notes.trim()) throw new Error("As notas da revalidacao sao obrigatorias.");
+  const { finding, findings } = findFinding(session, findingId);
+  const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const revalidation = {
+    id: input.id ?? `${findingId}-revalidation-${finding.revalidations.length + 1}`,
+    reviewer: input.reviewer.trim(),
+    result: input.result,
+    notes: input.notes.trim(),
+    createdAt
+  };
+  return {
+    ...session,
+    findings: findings.map((item) => item.id === findingId ? {
+      ...item,
+      status: input.result,
+      updatedAt: createdAt,
+      revalidations: [...item.revalidations, revalidation],
+      statusHistory: [...item.statusHistory, { status: input.result, changedAt: createdAt, reason: "Revalidacao" }]
+    } : item),
+    updatedAt: createdAt,
+    history: appendHistory(session, "FINDING_REVALIDATED", `Validacao revalidada: ${finding.rule} -> ${input.result}`, createdAt)
   };
 }
 function addReviewComment(session, input) {
@@ -191,6 +295,33 @@ function navigateReviewSession(session, target, now = /* @__PURE__ */ new Date()
     ]
   };
 }
+function validateFindingInput(input) {
+  if (!input.rule.trim()) throw new Error("A regra violada e obrigatoria.");
+  if (!input.description.trim()) throw new Error("A descricao da validacao e obrigatoria.");
+  if (!input.file.trim()) throw new Error("O arquivo da validacao e obrigatorio.");
+  if (!Number.isInteger(input.line) || input.line < 1) throw new Error("A linha da validacao deve ser maior que zero.");
+  if (!input.commit.trim()) throw new Error("O commit da validacao e obrigatorio.");
+  if (!input.responsible.trim()) throw new Error("O responsavel da validacao e obrigatorio.");
+}
+function findFinding(session, findingId) {
+  const findings = session.findings ?? [];
+  const finding = findings.find((item) => item.id === findingId);
+  if (!finding) {
+    throw new Error(`Validacao nao encontrada: ${findingId}`);
+  }
+  return { finding, findings };
+}
+function appendHistory(session, type, message, createdAt) {
+  return [
+    ...session.history,
+    {
+      id: `${session.id}-history-${session.history.length + 1}`,
+      type,
+      message,
+      createdAt
+    }
+  ];
+}
 function updateReviewSessionGitContext(session, git2, now = /* @__PURE__ */ new Date()) {
   const updatedAt = now.toISOString();
   return {
@@ -286,6 +417,30 @@ var ReviewSessionService = class {
   async editComment(id, commentId, body, editor) {
     const session = await this.getExistingSession(id);
     const updated = editReviewComment(session, commentId, body, editor);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async createFinding(id, input) {
+    const session = await this.getExistingSession(id);
+    const updated = createValidationFinding(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async updateFindingStatus(id, findingId, status, reason) {
+    const session = await this.getExistingSession(id);
+    const updated = updateValidationFindingStatus(session, findingId, status, reason);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async registerCorrection(id, findingId, input) {
+    const session = await this.getExistingSession(id);
+    const updated = registerCorrectionAttempt(session, findingId, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async revalidate(id, findingId, input) {
+    const session = await this.getExistingSession(id);
+    const updated = revalidateFinding(session, findingId, input);
     await this.repository.saveCurrent(updated);
     return updated;
   }
@@ -460,6 +615,38 @@ var ReviewPanel = class {
     }
     if (message.type === "editReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.body === "string") {
       await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode.env.machineId);
+      await this.postState();
+    }
+    if (message.type === "createValidationFinding" && typeof message.payload?.id === "string" && typeof message.payload.rule === "string" && typeof message.payload.severity === "string" && isValidationSeverity(message.payload.severity) && typeof message.payload.description === "string" && typeof message.payload.file === "string" && typeof message.payload.line === "number" && typeof message.payload.commit === "string") {
+      await this.service.createFinding(message.payload.id, {
+        rule: message.payload.rule,
+        severity: message.payload.severity,
+        description: message.payload.description,
+        file: message.payload.file,
+        line: message.payload.line,
+        commit: message.payload.commit,
+        responsible: vscode.env.machineId
+      });
+      await this.postState();
+    }
+    if (message.type === "updateValidationFindingStatus" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.status === "string" && isValidationFindingStatus(message.payload.status)) {
+      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status);
+      await this.postState();
+    }
+    if (message.type === "registerCorrectionAttempt" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.commit === "string" && typeof message.payload.description === "string") {
+      await this.service.registerCorrection(message.payload.id, message.payload.findingId, {
+        author: vscode.env.machineId,
+        commit: message.payload.commit,
+        description: message.payload.description
+      });
+      await this.postState();
+    }
+    if (message.type === "revalidateFinding" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.result === "string" && isValidationFindingStatus(message.payload.result) && typeof message.payload.notes === "string") {
+      await this.service.revalidate(message.payload.id, message.payload.findingId, {
+        reviewer: vscode.env.machineId,
+        result: message.payload.result,
+        notes: message.payload.notes
+      });
       await this.postState();
     }
   }

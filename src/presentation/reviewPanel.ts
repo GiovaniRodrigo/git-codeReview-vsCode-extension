@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { ReviewSessionService } from '../application/reviewSessionService';
-import { isReviewSessionStatus, ReviewNavigationKind } from '../domain/reviewSession';
+import {
+  isReviewSessionStatus,
+  isValidationFindingStatus,
+  isValidationSeverity,
+  ReviewNavigationKind
+} from '../domain/reviewSession';
 
 type ReviewView = 'dashboard' | 'analysis';
 
@@ -116,6 +121,71 @@ export class ReviewPanel {
       && typeof message.payload.body === 'string'
     ) {
       await this.service.editComment(message.payload.id, message.payload.commentId, message.payload.body, vscode.env.machineId);
+      await this.postState();
+    }
+
+    if (
+      message.type === 'createValidationFinding'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.rule === 'string'
+      && typeof message.payload.severity === 'string'
+      && isValidationSeverity(message.payload.severity)
+      && typeof message.payload.description === 'string'
+      && typeof message.payload.file === 'string'
+      && typeof message.payload.line === 'number'
+      && typeof message.payload.commit === 'string'
+    ) {
+      await this.service.createFinding(message.payload.id, {
+        rule: message.payload.rule,
+        severity: message.payload.severity,
+        description: message.payload.description,
+        file: message.payload.file,
+        line: message.payload.line,
+        commit: message.payload.commit,
+        responsible: vscode.env.machineId
+      });
+      await this.postState();
+    }
+
+    if (
+      message.type === 'updateValidationFindingStatus'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.findingId === 'string'
+      && typeof message.payload.status === 'string'
+      && isValidationFindingStatus(message.payload.status)
+    ) {
+      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status);
+      await this.postState();
+    }
+
+    if (
+      message.type === 'registerCorrectionAttempt'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.findingId === 'string'
+      && typeof message.payload.commit === 'string'
+      && typeof message.payload.description === 'string'
+    ) {
+      await this.service.registerCorrection(message.payload.id, message.payload.findingId, {
+        author: vscode.env.machineId,
+        commit: message.payload.commit,
+        description: message.payload.description
+      });
+      await this.postState();
+    }
+
+    if (
+      message.type === 'revalidateFinding'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.findingId === 'string'
+      && typeof message.payload.result === 'string'
+      && isValidationFindingStatus(message.payload.result)
+      && typeof message.payload.notes === 'string'
+    ) {
+      await this.service.revalidate(message.payload.id, message.payload.findingId, {
+        reviewer: vscode.env.machineId,
+        result: message.payload.result,
+        notes: message.payload.notes
+      });
       await this.postState();
     }
   }

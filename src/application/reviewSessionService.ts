@@ -1,12 +1,18 @@
 import {
   addReviewComment,
   createReviewSession,
+  createValidationFinding,
   editReviewComment,
   GitContext,
   navigateReviewSession,
+  registerCorrectionAttempt,
+  revalidateFinding,
   ReviewNavigationTarget,
   ReviewSession,
   ReviewSessionStatus,
+  updateValidationFindingStatus,
+  ValidationFindingStatus,
+  ValidationSeverity,
   updateReviewSessionGitContext,
   updateReviewSessionStatus
 } from '../domain/reviewSession';
@@ -92,6 +98,58 @@ export class ReviewSessionService {
   async editComment(id: string, commentId: string, body: string, editor: string): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = editReviewComment(session, commentId, body, editor);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async createFinding(
+    id: string,
+    input: {
+      rule: string;
+      severity: ValidationSeverity;
+      description: string;
+      file: string;
+      line: number;
+      commit: string;
+      responsible: string;
+    }
+  ): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = createValidationFinding(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async updateFindingStatus(
+    id: string,
+    findingId: string,
+    status: ValidationFindingStatus,
+    reason?: string
+  ): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = updateValidationFindingStatus(session, findingId, status, reason);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async registerCorrection(
+    id: string,
+    findingId: string,
+    input: { author: string; commit: string; description: string }
+  ): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = registerCorrectionAttempt(session, findingId, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async revalidate(
+    id: string,
+    findingId: string,
+    input: { reviewer: string; result: ValidationFindingStatus; notes: string }
+  ): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = revalidateFinding(session, findingId, input);
     await this.repository.saveCurrent(updated);
     return updated;
   }
