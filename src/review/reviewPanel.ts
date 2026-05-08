@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { CommitService } from "../git/commitService";
 import { CommitSummary, GitRef } from "../git/types";
+import { ReviewState } from "../productivity/reviewState";
 import { createGitDocumentUri } from "./gitContentProvider";
 import { buildReviewModel, ReviewModel } from "./reviewModel";
 
@@ -10,26 +11,27 @@ export class ReviewPanel {
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
-    private readonly commitService: CommitService
+    private readonly commitService: CommitService,
+    private readonly reviewState: ReviewState
   ) {
     this.panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
     this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => this.handleMessage(message), undefined, this.disposables);
   }
 
-  public static async openForRef(context: vscode.ExtensionContext, commitService: CommitService, rootPath: string, ref: GitRef): Promise<void> {
-    const panel = ReviewPanel.createOrReuse(context, commitService);
+  public static async openForRef(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState, rootPath: string, ref: GitRef): Promise<void> {
+    const panel = ReviewPanel.createOrReuse(context, commitService, reviewState);
     panel.panel.title = `Review: ${ref.name}`;
     await panel.renderRef(rootPath, ref);
   }
 
-  public static async openForCommit(context: vscode.ExtensionContext, commitService: CommitService, rootPath: string, ref: GitRef, commit: CommitSummary): Promise<void> {
-    const panel = ReviewPanel.createOrReuse(context, commitService);
+  public static async openForCommit(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState, rootPath: string, ref: GitRef, commit: CommitSummary): Promise<void> {
+    const panel = ReviewPanel.createOrReuse(context, commitService, reviewState);
     panel.panel.title = `Review: ${commit.shortHash}`;
     const details = await commitService.getCommitDetails(rootPath, commit.hash);
-    panel.render(buildReviewModel(rootPath, ref, [details]));
+    panel.render(buildReviewModel(rootPath, ref, [details], reviewState.getReviewedFiles(rootPath)));
   }
 
-  private static createOrReuse(context: vscode.ExtensionContext, commitService: CommitService): ReviewPanel {
+  private static createOrReuse(context: vscode.ExtensionContext, commitService: CommitService, reviewState: ReviewState): ReviewPanel {
     if (ReviewPanel.currentPanel) {
       ReviewPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
       return ReviewPanel.currentPanel;
@@ -41,14 +43,14 @@ export class ReviewPanel {
       localResourceRoots: [context.extensionUri]
     });
 
-    ReviewPanel.currentPanel = new ReviewPanel(panel, commitService);
+    ReviewPanel.currentPanel = new ReviewPanel(panel, commitService, reviewState);
     return ReviewPanel.currentPanel;
   }
 
   private async renderRef(rootPath: string, ref: GitRef): Promise<void> {
     const commits = await this.commitService.listCommits(rootPath, ref.name, 100);
     const details = await Promise.all(commits.map((commit) => this.commitService.getCommitDetails(rootPath, commit.hash)));
-    this.render(buildReviewModel(rootPath, ref, details));
+    this.render(buildReviewModel(rootPath, ref, details, this.reviewState.getReviewedFiles(rootPath)));
   }
 
   private render(model: ReviewModel): void {
@@ -56,6 +58,17 @@ export class ReviewPanel {
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
+    if (message.command === "markFileReviewed") {
+      await this.reviewState.markFileReviewed(message.rootPath, message.hash, message.path);
+      return;
+    }
+
+    if (message.command === "reviewSelected") {
+      vscode.window.showInformationMessage(`Creating review process for ${message.hashes?.length} selected commits...`);
+      // Future: integrate with codeReview.createReviewProcess
+      return;
+    }
+
     if (message.command !== "openDiff") {
       return;
     }
@@ -75,12 +88,13 @@ export class ReviewPanel {
 }
 
 type WebviewMessage = {
-  command: "openDiff";
+  command: "openDiff" | "markFileReviewed" | "reviewSelected";
   rootPath: string;
   hash: string;
   shortHash: string;
   path: string;
   previousPath?: string;
+  hashes?: string[];
 };
 
 function getHtml(webview: vscode.Webview, model: ReviewModel): string {
@@ -146,11 +160,24 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       margin-bottom: 2px;
     }
     .filters {
-      display: grid;
-      grid-template-columns: minmax(180px, 1.5fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr);
+      display: flex;
+      flex-direction: column;
       gap: 8px;
       border-bottom: 1px solid var(--border);
     }
+    .filter-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .filter-secondary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      padding-top: 4px;
+    }
+    .hidden { display: none !important; }
     input, select {
       width: 100%;
       min-height: 30px;
@@ -169,6 +196,10 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       justify-content: space-between;
       gap: 12px;
       align-items: center;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
     }
     .commit {
       border: 1px solid var(--border);
@@ -197,6 +228,9 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
     .stats {
       white-space: nowrap;
       color: var(--muted);
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
     .files {
       margin: 0;
@@ -205,7 +239,7 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
     }
     .file {
       display: grid;
-      grid-template-columns: 44px 1fr auto;
+      grid-template-columns: 44px 1fr auto auto;
       gap: 8px;
       align-items: center;
       padding: 7px 10px;
@@ -216,6 +250,32 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       font-family: var(--vscode-editor-font-family);
       color: var(--muted);
     }
+    .risk {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--vscode-badge-foreground);
+      background: var(--vscode-badge-background);
+      padding: 1px 7px;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .risk-high {
+      color: var(--vscode-editorError-foreground);
+      background: transparent;
+      border-color: var(--vscode-editorError-foreground);
+    }
+    .risk-medium {
+      color: var(--vscode-editorWarning-foreground);
+      background: transparent;
+      border-color: var(--vscode-editorWarning-foreground);
+    }
+    .category {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .reviewed {
+      color: var(--vscode-testing-iconPassed);
+    }
     button {
       min-height: 28px;
       color: var(--accent-text);
@@ -225,12 +285,21 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       padding: 4px 10px;
       cursor: pointer;
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--vscode-foreground);
+      border: 1px solid var(--border);
+    }
     .empty {
       color: var(--muted);
       padding: 24px 0;
     }
     @media (max-width: 720px) {
-      .filters { grid-template-columns: 1fr; }
+      .filter-row { grid-template-columns: 1fr; }
       header, .toolbar { align-items: stretch; flex-direction: column; }
       .commit-head, .file { grid-template-columns: 28px 1fr; }
       .stats, .file button { grid-column: 2; justify-self: start; }
@@ -248,16 +317,26 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
   </header>
   <section class="summary" aria-label="Review summary"></section>
   <section class="filters" aria-label="Commit filters">
-    <input id="search" type="search" placeholder="Buscar por mensagem, autor, hash ou arquivo">
-    <select id="branch"></select>
-    <select id="author"></select>
-    <input id="date" type="date">
-    <select id="file"></select>
+    <div class="filter-row">
+      <input id="search" type="search" placeholder="Search message, author, hash or file" title="Filters commits by message, author, hash, file, category or risk reason" aria-label="Search commits">
+      <select id="risk" title="Filters commits and files by risk level" aria-label="Filter by risk"></select>
+      <select id="reviewStatus" title="Filters reviewed or unreviewed files" aria-label="Filter by review state"></select>
+      <button id="toggleFilters" class="secondary" title="Show more filters" aria-label="Toggle more filters">More Filters</button>
+    </div>
+    <div id="secondaryFilters" class="filter-secondary hidden">
+      <select id="branch" title="Filters commits by selected branch or tag" aria-label="Filter by branch"></select>
+      <select id="author" title="Filters commits by author" aria-label="Filter by author"></select>
+      <input id="date" type="date" title="Filters commits by date" aria-label="Filter by date">
+      <select id="file" title="Filters commits that change a specific file" aria-label="Filter by file"></select>
+    </div>
   </section>
   <main>
     <div class="toolbar">
       <div id="visibleCount" class="muted"></div>
-      <button id="clearSelection">Limpar seleção</button>
+      <div class="actions">
+        <button id="reviewSelected" title="Create review process for selected commits" aria-label="Review selected commits" class="hidden">Review Selected</button>
+        <button id="clearSelection" title="Remove all selected commits" aria-label="Clear commit selection" class="secondary hidden">Clear Selection</button>
+      </div>
     </div>
     <div id="commits"></div>
   </main>
@@ -270,39 +349,53 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       subtitle: document.getElementById("subtitle"),
       summary: document.querySelector(".summary"),
       search: document.getElementById("search"),
+      risk: document.getElementById("risk"),
+      reviewStatus: document.getElementById("reviewStatus"),
       branch: document.getElementById("branch"),
       author: document.getElementById("author"),
       date: document.getElementById("date"),
       file: document.getElementById("file"),
+      toggleFilters: document.getElementById("toggleFilters"),
+      secondaryFilters: document.getElementById("secondaryFilters"),
       selectedCount: document.getElementById("selectedCount"),
       visibleCount: document.getElementById("visibleCount"),
+      reviewSelected: document.getElementById("reviewSelected"),
       clearSelection: document.getElementById("clearSelection"),
       commits: document.getElementById("commits")
     };
 
     elements.title.textContent = model.ref.name;
     elements.subtitle.textContent = model.ref.kind === "tag" ? "Tag" : "Branch " + (model.ref.type || "");
-    elements.summary.innerHTML = [
-      metric(model.totals.commits, "commits"),
-      metric(model.totals.files, "arquivos"),
-      metric("+" + model.totals.additions, "linhas adicionadas"),
-      metric("-" + model.totals.deletions, "linhas removidas")
-    ].join("");
+    fillSelect(elements.risk, "All risks", ["high", "medium", "low"]);
+    fillSelect(elements.reviewStatus, "All states", ["unreviewed", "reviewed"]);
+    fillSelect(elements.branch, "All branches", model.refs);
+    fillSelect(elements.author, "All authors", model.authors);
+    fillSelect(elements.file, "All files", model.files);
 
-    fillSelect(elements.branch, "Todas as branches", model.refs);
-    fillSelect(elements.author, "Todos os autores", model.authors);
-    fillSelect(elements.file, "Todos os arquivos", model.files);
-
-    for (const input of [elements.search, elements.branch, elements.author, elements.date, elements.file]) {
+    for (const input of [elements.search, elements.risk, elements.reviewStatus, elements.branch, elements.author, elements.date, elements.file]) {
       input.addEventListener("input", render);
     }
     elements.clearSelection.addEventListener("click", () => {
       selected.clear();
       render();
     });
+    elements.toggleFilters.addEventListener("click", () => {
+      elements.secondaryFilters.classList.toggle("hidden");
+      elements.toggleFilters.textContent = elements.secondaryFilters.classList.contains("hidden") ? "More Filters" : "Less Filters";
+    });
+    elements.reviewSelected.addEventListener("click", () => {
+      vscode.postMessage({
+        command: "reviewSelected",
+        rootPath: model.rootPath,
+        hashes: Array.from(selected)
+      });
+    });
 
     function render() {
+      renderSummary();
       const query = elements.search.value.trim().toLowerCase();
+      const risk = elements.risk.value;
+      const reviewStatus = elements.reviewStatus.value;
       const branch = elements.branch.value;
       const author = elements.author.value;
       const date = elements.date.value;
@@ -314,39 +407,70 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
           commit.message,
           commit.authorName,
           commit.authorEmail || "",
-          commit.files.map((item) => item.path).join(" ")
+          commit.reviewReason,
+          commit.files.map((item) => [item.path, item.category, item.risk, item.reviewReason].join(" ")).join(" ")
         ].join(" ").toLowerCase();
         const commitDate = commit.date.slice(0, 10);
         return (!query || haystack.includes(query))
+          && (!risk || commit.risk === risk || commit.files.some((item) => item.risk === risk))
+          && (!reviewStatus || commit.files.some((item) => reviewStatus === "reviewed" ? item.reviewed : !item.reviewed))
           && (!branch || commit.refName === branch)
           && (!author || commit.authorName === author)
           && (!date || commitDate === date)
           && (!file || commit.files.some((item) => item.path === file));
-      });
+      }).slice().sort((left, right) => right.riskScore - left.riskScore || new Date(right.date).getTime() - new Date(left.date).getTime());
 
-      elements.visibleCount.textContent = commits.length + " commit(s) visíveis";
-      elements.selectedCount.textContent = selected.size + " commit(s) selecionado(s)";
-      elements.commits.innerHTML = commits.length ? commits.map(renderCommit).join("") : '<div class="empty">Nenhum commit encontrado.</div>';
+      elements.visibleCount.textContent = commits.length + " commit(s) visible";
+      elements.selectedCount.textContent = selected.size > 0 ? selected.size + " commit(s) selected" : "";
+      
+      elements.clearSelection.classList.toggle("hidden", selected.size === 0);
+      elements.reviewSelected.classList.toggle("hidden", selected.size === 0);
+
+      elements.commits.innerHTML = commits.length ? commits.map(renderCommit).join("") : '<div class="empty">No commits found.</div>';
+    }
+
+    function renderSummary() {
+      elements.summary.innerHTML = [
+        metric(model.totals.commits, "commits", "Total commits loaded in the panel"),
+        metric(model.totals.files, "files", "Total unique changed files"),
+        metric(model.totals.highRiskFiles, "high risk files", "Files classified as high risk by local heuristics"),
+        metric(model.totals.reviewedFiles + "/" + (model.totals.reviewedFiles + model.totals.unreviewedFiles), "reviewed files", "Local progress of files marked as reviewed"),
+        metric("+" + model.totals.additions, "lines added", "Total lines added"),
+        metric("-" + model.totals.deletions, "lines removed", "Total lines removed")
+      ].join("");
     }
 
     function renderCommit(commit) {
       const checked = selected.has(commit.hash) ? "checked" : "";
+      const files = visibleFiles(commit);
       return '<article class="commit">'
         + '<div class="commit-head">'
-        + '<input type="checkbox" aria-label="Selecionar commit" data-select="' + escapeAttr(commit.hash) + '" ' + checked + '>'
+        + '<input type="checkbox" aria-label="Select commit ' + escapeAttr(commit.shortHash) + '" title="Select this commit for panel follow-up" data-select="' + escapeAttr(commit.hash) + '" ' + checked + '>'
         + '<div><div class="message">' + escapeHtml(commit.message) + '</div>'
-        + '<div class="meta"><span>' + escapeHtml(commit.shortHash) + '</span><span>' + escapeHtml(commit.authorName) + '</span><span>' + formatDate(commit.date) + '</span><span>' + escapeHtml(commit.hash) + '</span></div></div>'
-        + '<div class="stats">+' + commit.additions + ' -' + commit.deletions + '</div>'
+        + '<div class="meta"><span>' + escapeHtml(commit.shortHash) + '</span><span>' + escapeHtml(commit.authorName) + '</span><span>' + formatDate(commit.date) + '</span><span>' + escapeHtml(commit.hash) + '</span><span>' + escapeHtml(commit.reviewReason) + '</span></div></div>'
+        + '<div class="stats"><span class="risk risk-' + escapeAttr(commit.risk) + '" title="' + escapeAttr(commit.reviewReason) + '">' + escapeHtml(commit.risk) + '</span><span title="Lines added and removed in this commit">+' + commit.additions + ' -' + commit.deletions + '</span></div>'
         + '</div>'
-        + '<ul class="files">' + commit.files.map((file) => renderFile(commit, file)).join("") + '</ul>'
+        + '<ul class="files">' + files.map((file) => renderFile(commit, file)).join("") + '</ul>'
         + '</article>';
+    }
+
+    function visibleFiles(commit) {
+      const reviewStatus = elements.reviewStatus.value;
+      const risk = elements.risk.value;
+      const file = elements.file.value;
+      return commit.files.filter((item) => {
+        return (!reviewStatus || (reviewStatus === "reviewed" ? item.reviewed : !item.reviewed))
+          && (!risk || item.risk === risk)
+          && (!file || item.path === file);
+      });
     }
 
     function renderFile(commit, file) {
       return '<li class="file">'
-        + '<span class="status">' + escapeHtml(file.status) + '</span>'
-        + '<span title="' + escapeAttr(file.previousPath ? file.previousPath + " -> " + file.path : file.path) + '">' + escapeHtml(file.path) + '</span>'
-        + '<button data-diff="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '" data-previous-path="' + escapeAttr(file.previousPath || "") + '">Diff +' + file.additions + ' -' + file.deletions + '</button>'
+        + '<span class="status" title="File status: ' + escapeAttr(file.status) + '">' + escapeHtml(file.status) + '</span>'
+        + '<span title="' + escapeAttr(fileTooltip(file)) + '">' + escapeHtml(file.path) + ' <span class="category">' + escapeHtml(file.category) + ' &middot; ' + escapeHtml(file.risk) + reviewedText(file) + '</span></span>'
+        + '<button data-reviewed="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '" title="' + escapeAttr(file.reviewed ? "File already marked as reviewed" : "Mark this file as reviewed locally") + '" aria-label="' + escapeAttr(file.reviewed ? "File reviewed" : "Mark file as reviewed") + '" ' + (file.reviewed ? "disabled" : "") + '>' + (file.reviewed ? "Reviewed" : "Mark Reviewed") + '</button>'
+        + '<button data-diff="' + escapeAttr(commit.hash) + '" data-path="' + escapeAttr(file.path) + '" data-previous-path="' + escapeAttr(file.previousPath || "") + '" title="Opens native VS Code diff for this file" aria-label="Open diff for ' + escapeAttr(file.path) + '">Diff +' + file.additions + ' -' + file.deletions + '</button>'
         + '</li>';
     }
 
@@ -354,10 +478,29 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       const checkbox = event.target.closest("[data-select]");
       if (!checkbox) return;
       checkbox.checked ? selected.add(checkbox.dataset.select) : selected.delete(checkbox.dataset.select);
-      elements.selectedCount.textContent = selected.size + " commit(s) selecionado(s)";
+      render();
     });
 
     elements.commits.addEventListener("click", (event) => {
+      const reviewedButton = event.target.closest("[data-reviewed]");
+      if (reviewedButton) {
+        const commit = model.commits.find((item) => item.hash === reviewedButton.dataset.reviewed);
+        const file = commit?.files.find((item) => item.path === reviewedButton.dataset.path);
+        if (!commit || !file || file.reviewed) return;
+        file.reviewed = true;
+        model.totals.reviewedFiles += 1;
+        model.totals.unreviewedFiles -= 1;
+        vscode.postMessage({
+          command: "markFileReviewed",
+          rootPath: model.rootPath,
+          hash: commit.hash,
+          shortHash: commit.shortHash,
+          path: file.path
+        });
+        render();
+        return;
+      }
+
       const button = event.target.closest("[data-diff]");
       if (!button) return;
       const commit = model.commits.find((item) => item.hash === button.dataset.diff);
@@ -371,12 +514,21 @@ function getHtml(webview: vscode.Webview, model: ReviewModel): string {
       });
     });
 
-    function metric(value, label) {
-      return '<div class="metric"><strong>' + escapeHtml(String(value)) + '</strong><span class="muted">' + escapeHtml(label) + '</span></div>';
+    function metric(value, label, title) {
+      return '<div class="metric" title="' + escapeAttr(title) + '"><strong>' + escapeHtml(String(value)) + '</strong><span class="muted">' + escapeHtml(label) + '</span></div>';
     }
 
     function fillSelect(select, label, options) {
       select.innerHTML = '<option value="">' + escapeHtml(label) + '</option>' + options.map((option) => '<option value="' + escapeAttr(option) + '">' + escapeHtml(option) + '</option>').join("");
+    }
+
+    function fileTooltip(file) {
+      const path = file.previousPath ? file.previousPath + " -> " + file.path : file.path;
+      return path + "\\n" + file.reviewReason;
+    }
+
+    function reviewedText(file) {
+      return file.reviewed ? ' <span class="reviewed">reviewed</span>' : "";
     }
 
     function formatDate(value) {

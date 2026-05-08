@@ -127,7 +127,17 @@ Use IA preferencialmente para acelerar:
 - analise de logs;
 - revisoes de consistencia.
 
-## 10. Mentalidade final
+## 11. IA como funcionalidade do produto (IA Assistida)
+
+Ao implementar funcionalidades de IA para o usuario final (ex: auxilio no Code Review via Codex/Copilot):
+
+- **Privacidade e Consentimento**: a integracao deve ser opcional (opt-in). Nunca envie codigo do usuario para APIs de IA sem permissao explicita.
+- **Transparencia**: deixe claro quando uma sugestao ou resumo foi gerado por IA.
+- **Apoio, nao decisao**: a IA deve sugerir pontos de atencao no diff, mas a aprovacao final e sempre humana.
+- **Fallback**: a extensao deve permanecer util e funcional mesmo se o serviço de IA estiver indisponivel ou desativado.
+- **Seguranca**: nao envie segredos, tokens ou informacoes sensiveis do workspace para modelos de IA.
+
+## 12. Mentalidade final
 
 Bons desenvolvedores ficam mais rapidos com IA. Desenvolvedores sem criterio podem apenas produzir software ruim mais rapidamente.
 

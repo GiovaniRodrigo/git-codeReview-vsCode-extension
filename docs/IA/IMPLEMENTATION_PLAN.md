@@ -22,13 +22,21 @@ O projeto conta atualmente com:
 - pasta `IA/` com contexto de desenvolvimento assistido;
 - scaffold de extensao VS Code em TypeScript;
 - servicos Git locais para detectar repositorio, listar branches, tags, commits e arquivos alterados;
+- leitura de informacoes da git tree com branch atual, HEAD, upstream, ahead/behind e contadores da working tree;
+- comando para baixar/atualizar branches remotas com `git fetch --all --prune`;
 - TreeView `Git Review` no container nativo de Source Control;
 - comando para abrir detalhes de commit em documento Markdown temporario;
 - diff nativo do VS Code usando provider de documentos virtuais para conteudo Git.
 - Webview de review com metadata, estatisticas, busca, filtros e selecao multipla de commits.
+- priorizacao assistida no painel de review com categoria de arquivo, nivel de risco e motivo explicavel.
+- progresso local por arquivo revisado no painel, com filtro para revisados e nao revisados.
+- processos locais de code review para salvar, retomar e concluir revisoes de branch, tag ou commit.
 - integracao GitHub com remote, autenticacao nativa do VS Code, Pull Requests, estados e checks;
+- integracao GitLab com remote, token em SecretStorage e Merge Requests;
 - comandos de review para comentario geral, comentario por arquivo/linha, approve e request changes;
 - produtividade local com comparar branches, commits revisados, nao revisados, atalhos e notificacoes;
+- painel interativo de comparacao entre branches com filtros, estatisticas e diffs por arquivo;
+- telemetria opcional para eventos minimos de comando, enviada por POST para API configuravel quando habilitada;
 - cache em memoria, lazy loading da TreeView, refresh em background e empacotamento VSIX.
 
 ## Fluxo IA para Novas Funcionalidades
@@ -129,8 +137,9 @@ src/
 | Fase 1 | Scaffold da extensao, Git local, branches, tags, commits, arquivos e diff | Implementado |
 | Fase 2 | Webview de review, filtros, busca e selecao de commits | Implementado |
 | Fase 3 | GitHub remote, autenticacao, PRs, status e checks | Implementado |
-| Fase 4 | Comentarios, aprovar PR, solicitar mudancas e review geral | Implementado |
-| Fase 5 | Comparacao de branches, historico local, notificacoes e monorepo | Implementado |
+| Fase 3b | GitLab remote, MRs, token em SecretStorage e status | Implementado |
+| Fase 4 | Review completo: comentarios, approve, request changes (GH/GL) | Em progresso |
+| Fase 5 | Produtividade e IA: comparacao branches, monorepo e Codex/Copilot | Em progresso |
 | Fase 6 | Cache, lazy loading, indexacao e background refresh | Implementado |
 | Fase 7 | README, demos, icone, CHANGELOG, empacotamento e publicacao | Implementado parcialmente |
 
@@ -140,7 +149,9 @@ Entregaveis:
 
 - projeto VS Code Extension em TypeScript;
 - TreeView lateral com branches locais, remotas e tags;
+- grupo `Git Tree` com contexto do repositorio atual;
 - commits por branch;
+- acao para atualizar referencias remotas sem criar branches locais automaticamente;
 - detalhes do commit;
 - arquivos alterados;
 - comando para abrir diff no VS Code.
@@ -150,7 +161,9 @@ Status: implementado no MVP inicial.
 Criterios de aceite:
 
 - workspace sem Git mostra erro amigavel;
+- workspace Git mostra contexto de branch, HEAD, upstream e working tree;
 - workspace Git lista branches locais e remotas;
+- usuario consegue atualizar branches remotas pela TreeView e ver referencias novas apos refresh;
 - selecionar branch permite visualizar commits;
 - selecionar commit permite visualizar arquivos alterados;
 - selecionar arquivo alterado abre diff correspondente.
@@ -163,6 +176,10 @@ Entregaveis:
 - metadata do commit;
 - estatisticas de linhas;
 - filtros por branch, autor, data e arquivo;
+- filtro por risco e ordenacao sugerida para revisar mudancas mais arriscadas primeiro;
+- processo salvo para retomar revisoes depois;
+- marcacao local de arquivos revisados;
+- filtro por estado de revisao do arquivo;
 - busca de commits;
 - selecao multipla para revisao.
 
@@ -173,6 +190,9 @@ Criterios de aceite:
 - painel carrega a partir de commits reais;
 - filtros combinam sem quebrar a navegacao;
 - busca responde de forma previsivel para mensagem, autor e hash.
+- arquivos de maior risco aparecem primeiro e exibem motivo de priorizacao.
+- progresso por arquivo persiste no workspace e permite focar apenas no que falta revisar.
+- processo de review pode ser criado a partir de branch, tag ou commit e retomado no mesmo repositorio.
 
 ### Fase 3 - Integracao GitHub
 
@@ -191,20 +211,71 @@ Criterios de aceite:
 - erro de autenticacao e tratado explicitamente;
 - PRs aparecem associados a branch correta quando existirem.
 
+### Fase 3b - Integracao GitLab
+
+Entregaveis:
+
+- deteccao de remote GitLab;
+- comando para linkar GitLab com token salvo no SecretStorage;
+- cliente REST GitLab;
+- busca de Merge Requests;
+- relacao branch/MR;
+- status do MR.
+
+Criterios de aceite:
+
+- repositorio sem remote GitLab continua funcionando nos modos Git local e GitHub;
+- erro de token ou API nao bloqueia a TreeView;
+- MRs aparecem associados a branch correta quando existirem.
+
 ### Fase 4 - Code Review
 
 Entregaveis:
 
 - diff estilo GitHub quando necessario;
-- comentarios por arquivo e linha;
-- envio de comentarios;
-- approve, request changes e comentario geral.
+- comentarios por arquivo e linha para GitHub e GitLab;
+- envio de comentarios de review;
+- acoes de approve e request changes (ou similar no GitLab);
+- review geral.
 
 Criterios de aceite:
 
 - comentarios nao sao enviados acidentalmente;
 - falhas da API preservam o texto digitado pelo usuario;
-- acoes de review confirmam sucesso ou erro de forma clara.
+- acoes de review confirmam sucesso ou erro de forma clara;
+- suporte a GitLab inclui aprovacao de Merge Requests.
+
+### Fase 5 - Produtividade e IA
+
+Entregaveis:
+
+- comparar branches em painel interativo;
+- historico local de revisoes e notificacoes;
+- suporte a monorepo e multi-root;
+- **Integracao com IA (Codex/Copilot)**:
+  - comando opcional para analisar diff e sugerir melhorias;
+  - geracao de resumo de PR/MR via IA;
+  - deteccao de riscos potenciais (seguranca/performance) via LLM.
+
+Criterios de aceite:
+
+- comparacao de branches funciona de forma fluida;
+- a integracao com IA e estritamente "opt-in";
+- o usuario pode escolher qual motor de IA usar se disponivel.
+
+### Fase 6 - Performance e Escalabilidade
+
+Entregaveis:
+
+- cache persistente de commits e arquivos;
+- lazy loading de nos na TreeView;
+- background refresh das informacoes de PR/MR;
+- virtualizacao de listas longas.
+
+Criterios de aceite:
+
+- extensao permanece responsiva em repositorios com milhares de commits;
+- consumo de memoria e controlado.
 
 ## Estrategia de Testes
 
@@ -241,6 +312,7 @@ Processo esperado:
 - adicionar GIFs ou imagens de demo;
 - criar icone;
 - configurar `CHANGELOG.md`;
+- configurar telemetria opcional com endpoint e politica de dados minimos;
 - empacotar com `vsce package`;
 - publicar com `vsce publish`.
 

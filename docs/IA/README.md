@@ -4,7 +4,7 @@ Esta pasta concentra o contexto para agentes de IA trabalharem no projeto **Code
 
 ## Objetivo do Projeto
 
-Criar uma extensao do VS Code que ajude desenvolvedores a revisar codigo sem sair do editor, comecando pelo Git local e evoluindo para integracao completa com GitHub.
+Criar uma extensao do VS Code que ajude desenvolvedores a revisar codigo sem sair do editor, comecando pelo Git local e evoluindo para integracao completa com GitHub, GitLab e Inteligência Artificial (IA).
 
 ## Documentos Principais
 
@@ -13,6 +13,7 @@ Criar uma extensao do VS Code que ajude desenvolvedores a revisar codigo sem sai
 - `AI_FEATURE_WORKFLOW.md`: fluxo de trabalho para implementar funcionalidades com IA.
 - `AI_DEVELOPMENT_PRINCIPLES.md`: principios de uso responsavel de IA no projeto.
 - `RAG_IMPLEMENTATION.md`: ordem de recuperacao de contexto para agentes.
+- `PROGRAMMING_PARADIGMS.md`: detalhamento de padrões de projeto e paradigmas aplicados.
 - `GEMINI.md`: instrucoes operacionais para agentes compatíveis com Gemini CLI.
 - `USAGE.md`: guia pratico de uso desta pasta durante o desenvolvimento.
 

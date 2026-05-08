@@ -48,3 +48,28 @@ export interface GitHubRemote {
   remoteName: string;
   url: string;
 }
+
+export interface GitLabRemote {
+  host: string;
+  projectPath: string;
+  owner: string;
+  repo: string;
+  remoteName: string;
+  url: string;
+  webUrl: string;
+  apiBaseUrl: string;
+}
+
+export interface GitTreeInfo {
+  rootPath: string;
+  currentBranch: string;
+  upstream?: string;
+  head?: string;
+  ahead: number;
+  behind: number;
+  staged: number;
+  unstaged: number;
+  untracked: number;
+  conflicts: number;
+  isClean: boolean;
+}

@@ -120,3 +120,12 @@ A IA nao deve:
 - ignorar workspace sem repositorio Git;
 - remover comportamento existente sem aprovacao;
 - ignorar falha de teste, build ou lint.
+
+## Desenvolvimento de Funcionalidades de IA (IA Assistida)
+
+Para implementar recursos como Codex/Copilot na extensao:
+
+1. **Privacidade**: nunca envie codigo ou dados sensiveis para servicos externos sem acao/configuracao explicita do usuario.
+2. **Modularidade**: encapsule chamadas de IA em `src/ai/` para permitir multiplos provedores.
+3. **Fallback**: garanta que a UI nao quebre se a API de IA estiver offline ou o usuario nao tiver permissao/tokens.
+4. **UX**: use indicadores claros (ex: ícone ✨) para diferenciar sugestoes humanas de sugestoes de IA.
