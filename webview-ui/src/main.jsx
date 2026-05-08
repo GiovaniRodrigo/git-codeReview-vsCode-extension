@@ -1,3 +1,4 @@
+import logo from '../../media/logo_128px.png';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -54,7 +55,13 @@ function ReviewLeftbar({ view, setView, state }) {
   return (
     <aside className="leftbar">
       <div className="brand">
-        <div className="brand-icon"><Shield size={22} /></div>
+        <div className="brand-icon">
+          <img
+            src={logo}
+            alt="Code Review Logo"
+            className="brand-logo"
+          />
+        </div>
         <div>
           <strong>Code Review</strong>
           <span>Governança arquitetural</span>
