@@ -13,13 +13,16 @@ await esbuild.build({
 });
 
 const {
+  addCollaborationMessage,
   addReviewComment,
   createReviewSession,
   createValidationFinding,
   editReviewComment,
   navigateReviewSession,
+  registerPartialApproval,
   registerCorrectionAttempt,
   revalidateFinding,
+  updateMergeDecision,
   updateReviewSessionGitContext
 } = await import('../.tmp-tests/reviewSession.mjs');
 
@@ -208,4 +211,60 @@ test('revalidates and reopens findings preserving status history', () => {
   assert.equal(reopened.findings[0].status, 'REOPENED');
   assert.equal(reopened.findings[0].revalidations.length, 2);
   assert.equal(reopened.findings[0].statusHistory.length, 3);
+});
+
+test('adds collaboration messages with mentions and notifications', () => {
+  const session = createReviewSession({ git, author: 'Developer', reviewer: 'Reviewer', id: 'review-1' });
+  const updated = addCollaborationMessage(session, {
+    author: 'Reviewer',
+    body: 'Pode revisar este ponto @dev @architect?',
+    id: 'message-1'
+  });
+
+  assert.equal(updated.collaborationMessages.length, 1);
+  assert.deepEqual(updated.collaborationMessages[0].mentions, ['dev', 'architect']);
+  assert.equal(updated.notifications.length, 2);
+  assert.equal(updated.history.at(-1).type, 'COLLABORATION_MESSAGE_ADDED');
+});
+
+test('registers partial approvals and updates merge block decision', () => {
+  const session = createReviewSession({
+    git: { ...git, changedFiles: ['src/extension.ts', 'src/domain/reviewSession.ts'] },
+    author: 'Developer',
+    reviewer: 'Reviewer',
+    id: 'review-1'
+  });
+  const oneFileApproved = registerPartialApproval(session, {
+    scope: 'file',
+    target: 'src/extension.ts',
+    reviewer: 'Reviewer'
+  });
+  const fullyApproved = registerPartialApproval(oneFileApproved, {
+    scope: 'file',
+    target: 'src/domain/reviewSession.ts',
+    reviewer: 'Reviewer'
+  });
+
+  assert.equal(oneFileApproved.mergeDecision.blocked, true);
+  assert.equal(fullyApproved.mergeDecision.blocked, false);
+  assert.equal(fullyApproved.partialApprovals.length, 2);
+});
+
+test('blocks merge when critical or high findings are pending', () => {
+  const session = createValidationFinding(
+    createReviewSession({ git, author: 'Developer', reviewer: 'Reviewer', id: 'review-1' }),
+    {
+      rule: 'DIP',
+      severity: 'CRITICAL',
+      description: 'Pendente.',
+      file: 'src/extension.ts',
+      line: 1,
+      commit: 'abc123',
+      responsible: 'Developer'
+    }
+  );
+  const updated = updateMergeDecision(session);
+
+  assert.equal(updated.mergeDecision.blocked, true);
+  assert.ok(updated.mergeDecision.reasons.some((reason) => reason.includes('critica')));
 });

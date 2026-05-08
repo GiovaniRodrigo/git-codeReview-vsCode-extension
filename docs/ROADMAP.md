@@ -300,19 +300,19 @@ Melhorar fluxo entre reviewer e desenvolvedor.
 
 ### Comunicação
 
-* [ ] Threads colaborativas
-* [ ] Menções
-* [ ] Notificações
-* [ ] Histórico compartilhado
+* [x] Threads colaborativas
+* [x] Menções
+* [x] Notificações
+* [x] Histórico compartilhado
 
 ---
 
 ### Workflow
 
-* [ ] Aprovação parcial
-* [ ] Aprovação por módulo
-* [ ] Aprovação por arquivo
-* [ ] Bloqueio de merge
+* [x] Aprovação parcial
+* [x] Aprovação por módulo
+* [x] Aprovação por arquivo
+* [x] Bloqueio de merge
 
 ---
 

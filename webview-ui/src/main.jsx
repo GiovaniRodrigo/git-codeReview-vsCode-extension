@@ -44,6 +44,7 @@ function ReviewLeftbar({ view, setView, state }) {
     ['analysis', AlertTriangle, 'Diagnósticos', '25'],
     ['intelligence', Lightbulb, 'Inteligência', state?.intelligence?.suggestions?.length ? String(state.intelligence.suggestions.length) : ''],
     ['comments', MessageSquare, 'Comentários', session?.comments?.length ? String(session.comments.length) : ''],
+    ['collaboration', GitPullRequest, 'Colaboração', session?.notifications?.filter((item) => !item.read).length ? String(session.notifications.filter((item) => !item.read).length) : ''],
     ['conformities', CheckCircle2, 'Conformidades', '68'],
     ['telemetry', BarChart3, 'Telemetria', '94%'],
     ['history', Clock3, 'Histórico', '12'],
@@ -102,6 +103,7 @@ function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'telemetry') return <TelemetryCenter state={state} />;
   if (view === 'history') return <HistoryCenter state={state} />;
   if (view === 'intelligence') return <IntelligenceCenter state={state} />;
+  if (view === 'collaboration') return <CollaborationCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
   if (view === 'settings') return <SettingsCenter />;
   if (view === 'conformities') return <ConformitiesCenter />;
@@ -152,6 +154,7 @@ function ReviewCenter({ view, state, onStartReview }) {
       <ValidationFindingsPanel session={state?.currentSession} git={state?.git} />
       <ArchitectureRulesPanel session={state?.currentSession} />
       <IntelligencePanel intelligence={state?.intelligence} />
+      <CollaborationPanel session={state?.currentSession} />
 
       <section className="insight-grid">
         <InsightCard title="Inversão de Dependência" severity="Crítico" text="A camada de aplicação depende de repositório concreto. Abrir UserService.ts linha 11." />
@@ -383,6 +386,48 @@ function IntelligencePanel({ intelligence }) {
       </div>
       <div className="recommendation-strip">
         {recommendations.map((item) => <span key={item}>{item}</span>)}
+      </div>
+    </section>
+  );
+}
+
+function CollaborationPanel({ session }) {
+  const [message, setMessage] = useState('Pode validar este módulo @dev?');
+  const firstFile = session?.changedFiles?.[0] ?? 'src/extension.ts';
+  const moduleName = firstFile.split('/').slice(0, 2).join('/') || firstFile;
+
+  const sendMessage = () => {
+    if (!session || !message.trim()) return;
+    vscodeApi?.postMessage({ type: 'addCollaborationMessage', payload: { id: session.id, body: message } });
+    setMessage('');
+  };
+
+  return (
+    <section className="sessions-panel">
+      <div className="section-title">
+        <div>
+          <h2>Colaboração</h2>
+          <p className="muted">Threads, menções, notificações e aprovações parciais.</p>
+        </div>
+        <span className={session?.mergeDecision?.blocked ? 'merge blocked' : 'merge'}>{session?.mergeDecision?.blocked ? 'Merge bloqueado' : 'Merge liberado'}</span>
+      </div>
+      <div className="collab-form">
+        <input value={message} onChange={(event) => setMessage(event.target.value)} />
+        <button disabled={!session || !message.trim()} onClick={sendMessage}><MessageSquare size={16} /> Enviar</button>
+      </div>
+      <div className="workflow-actions">
+        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
+        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
+        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
+      </div>
+      <div className="collab-grid">
+        <TextListPanel title="Threads colaborativas" items={(session?.collaborationMessages ?? []).map((item) => `${item.author}: ${item.body}`)} />
+        <TextListPanel title="Notificações" items={(session?.notifications ?? []).map((item) => `@${item.recipient}: ${item.message}`)} />
+        <TextListPanel title="Histórico compartilhado" items={(session?.history ?? []).slice(-5).map((item) => item.message)} />
+      </div>
+      <div className="badge-row">
+        {(session?.partialApprovals ?? []).map((approval) => <Badge key={approval.id}>{approval.scope}: {approval.target}</Badge>)}
+        {(session?.mergeDecision?.reasons ?? []).map((reason) => <Badge key={reason}>{reason}</Badge>)}
       </div>
     </section>
   );
@@ -757,6 +802,17 @@ function IntelligenceCenter({ state }) {
         <TextListPanel title="Padrões detectados" items={intelligence.patterns ?? []} />
         <TextListPanel title="Comparação histórica" items={intelligence.comparisons ?? []} />
       </section>
+    </main>
+  );
+}
+
+function CollaborationCenter({ state }) {
+  return (
+    <main className="center-panel simple">
+      <header className="center-header">
+        <div><span className="eyebrow">Colaboração</span><h1>Fluxo reviewer/developer</h1><p>Comunicação, aprovações parciais e bloqueio de merge.</p></div>
+      </header>
+      <CollaborationPanel session={state?.currentSession} />
     </main>
   );
 }

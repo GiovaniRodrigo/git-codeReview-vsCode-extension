@@ -187,6 +187,10 @@ function createReviewSession(input) {
     commits: input.git.commits,
     comments: [],
     findings: [],
+    collaborationMessages: [],
+    notifications: [],
+    partialApprovals: [],
+    mergeDecision: { blocked: false, reasons: [], updatedAt: now },
     history: [
       {
         id: `${id}-created`,
@@ -195,6 +199,80 @@ function createReviewSession(input) {
         createdAt: now
       }
     ]
+  };
+}
+function addCollaborationMessage(session, input) {
+  if (!input.author.trim()) throw new Error("O autor da mensagem e obrigatorio.");
+  if (!input.body.trim()) throw new Error("A mensagem colaborativa nao pode ser vazia.");
+  const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const messages = session.collaborationMessages ?? [];
+  const notifications = session.notifications ?? [];
+  const id = input.id ?? `${session.id}-collab-${messages.length + 1}`;
+  const mentions = extractMentions(input.body);
+  const message = {
+    id,
+    threadId: input.threadId ?? id,
+    author: input.author.trim(),
+    body: input.body.trim(),
+    mentions,
+    createdAt
+  };
+  return {
+    ...session,
+    collaborationMessages: [...messages, message],
+    notifications: [
+      ...notifications,
+      ...mentions.map((mention, index) => ({
+        id: `${id}-mention-${index + 1}`,
+        recipient: mention,
+        message: `${message.author} mencionou voce na review ${session.sourceBranch}`,
+        read: false,
+        createdAt
+      }))
+    ],
+    updatedAt: createdAt,
+    history: appendHistory(session, "COLLABORATION_MESSAGE_ADDED", `Mensagem colaborativa adicionada por ${message.author}`, createdAt)
+  };
+}
+function registerPartialApproval(session, input) {
+  if (!input.target.trim()) throw new Error("O alvo da aprovacao parcial e obrigatorio.");
+  if (!input.reviewer.trim()) throw new Error("O reviewer da aprovacao parcial e obrigatorio.");
+  const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
+  const approvals = session.partialApprovals ?? [];
+  const approval = {
+    id: input.id ?? `${session.id}-approval-${approvals.length + 1}`,
+    scope: input.scope,
+    target: input.target.trim(),
+    reviewer: input.reviewer.trim(),
+    status: "APPROVED",
+    createdAt
+  };
+  const updated = {
+    ...session,
+    partialApprovals: [...approvals.filter((item) => !(item.scope === approval.scope && item.target === approval.target)), approval],
+    updatedAt: createdAt,
+    history: appendHistory(session, "PARTIAL_APPROVAL_REGISTERED", `Aprovacao por ${approval.scope}: ${approval.target}`, createdAt)
+  };
+  return updateMergeDecision(updated, new Date(createdAt));
+}
+function updateMergeDecision(session, now = /* @__PURE__ */ new Date()) {
+  const updatedAt = now.toISOString();
+  const findings = session.findings ?? [];
+  const reasons = [];
+  const criticalOpen = findings.filter((finding2) => finding2.severity === "CRITICAL" && finding2.status !== "APPROVED");
+  const highOpen = findings.filter((finding2) => finding2.severity === "HIGH" && finding2.status !== "APPROVED");
+  if (criticalOpen.length) reasons.push(`${criticalOpen.length} validacao critica pendente`);
+  if (highOpen.length) reasons.push(`${highOpen.length} validacao alta pendente`);
+  const changedFiles = session.changedFiles ?? [];
+  const approvals = session.partialApprovals ?? [];
+  const unapprovedFiles = changedFiles.filter((file) => !approvals.some((approval) => approval.scope === "file" && approval.target === file && approval.status === "APPROVED"));
+  if (changedFiles.length && unapprovedFiles.length) reasons.push(`${unapprovedFiles.length} arquivo(s) sem aprovacao parcial`);
+  const blocked = reasons.length > 0;
+  return {
+    ...session,
+    mergeDecision: { blocked, reasons, updatedAt },
+    updatedAt,
+    history: appendHistory(session, "MERGE_BLOCK_UPDATED", blocked ? "Merge bloqueado por pendencias de review" : "Merge liberado para a sessao", updatedAt)
   };
 }
 function isValidationFindingStatus(value) {
@@ -410,6 +488,9 @@ function validateFindingInput(input) {
   if (!Number.isInteger(input.line) || input.line < 1) throw new Error("A linha da validacao deve ser maior que zero.");
   if (!input.commit.trim()) throw new Error("O commit da validacao e obrigatorio.");
   if (!input.responsible.trim()) throw new Error("O responsavel da validacao e obrigatorio.");
+}
+function extractMentions(body) {
+  return Array.from(new Set(Array.from(body.matchAll(/@([a-zA-Z0-9_.-]+)/g)).map((match) => match[1])));
 }
 function findFinding(session, findingId) {
   const findings = session.findings ?? [];
@@ -785,6 +866,24 @@ var ReviewSessionService = class {
     await this.repository.saveCurrent(updated);
     return { session: updated, findings };
   }
+  async addCollaborationMessage(id, input) {
+    const session = await this.getExistingSession(id);
+    const updated = addCollaborationMessage(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async approvePartial(id, input) {
+    const session = await this.getExistingSession(id);
+    const updated = registerPartialApproval(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+  async refreshMergeDecision(id) {
+    const session = await this.getExistingSession(id);
+    const updated = updateMergeDecision(session);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
   async getExistingSession(id) {
     const session = await this.repository.getById(id);
     if (!session) {
@@ -1018,6 +1117,26 @@ var ReviewPanel = class {
     if (message.type === "runArchitectureValidation" && typeof message.payload?.id === "string") {
       const result = await this.service.runArchitectureValidation(message.payload.id);
       this.post({ type: "architectureValidationCompleted", payload: { count: result.findings.length } });
+      await this.postState();
+    }
+    if (message.type === "addCollaborationMessage" && typeof message.payload?.id === "string" && typeof message.payload.body === "string") {
+      await this.service.addCollaborationMessage(message.payload.id, {
+        author: vscode.env.machineId,
+        body: message.payload.body,
+        threadId: typeof message.payload.threadId === "string" ? message.payload.threadId : void 0
+      });
+      await this.postState();
+    }
+    if (message.type === "approvePartial" && typeof message.payload?.id === "string" && (message.payload.scope === "module" || message.payload.scope === "file") && typeof message.payload.target === "string") {
+      await this.service.approvePartial(message.payload.id, {
+        scope: message.payload.scope,
+        target: message.payload.target,
+        reviewer: vscode.env.machineId
+      });
+      await this.postState();
+    }
+    if (message.type === "refreshMergeDecision" && typeof message.payload?.id === "string") {
+      await this.service.refreshMergeDecision(message.payload.id);
       await this.postState();
     }
   }

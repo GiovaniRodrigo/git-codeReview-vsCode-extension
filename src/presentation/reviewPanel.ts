@@ -194,6 +194,38 @@ export class ReviewPanel {
       this.post({ type: 'architectureValidationCompleted', payload: { count: result.findings.length } });
       await this.postState();
     }
+
+    if (
+      message.type === 'addCollaborationMessage'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.body === 'string'
+    ) {
+      await this.service.addCollaborationMessage(message.payload.id, {
+        author: vscode.env.machineId,
+        body: message.payload.body,
+        threadId: typeof message.payload.threadId === 'string' ? message.payload.threadId : undefined
+      });
+      await this.postState();
+    }
+
+    if (
+      message.type === 'approvePartial'
+      && typeof message.payload?.id === 'string'
+      && (message.payload.scope === 'module' || message.payload.scope === 'file')
+      && typeof message.payload.target === 'string'
+    ) {
+      await this.service.approvePartial(message.payload.id, {
+        scope: message.payload.scope,
+        target: message.payload.target,
+        reviewer: vscode.env.machineId
+      });
+      await this.postState();
+    }
+
+    if (message.type === 'refreshMergeDecision' && typeof message.payload?.id === 'string') {
+      await this.service.refreshMergeDecision(message.payload.id);
+      await this.postState();
+    }
   }
 
   private async postState(): Promise<void> {

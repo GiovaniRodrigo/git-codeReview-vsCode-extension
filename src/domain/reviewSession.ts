@@ -27,7 +27,10 @@ export interface ReviewHistoryEntry {
     | 'FINDING_CREATED'
     | 'FINDING_STATUS_CHANGED'
     | 'CORRECTION_REGISTERED'
-    | 'FINDING_REVALIDATED';
+    | 'FINDING_REVALIDATED'
+    | 'COLLABORATION_MESSAGE_ADDED'
+    | 'PARTIAL_APPROVAL_REGISTERED'
+    | 'MERGE_BLOCK_UPDATED';
   message: string;
   createdAt: string;
 }
@@ -94,6 +97,40 @@ export interface Revalidation {
   createdAt: string;
 }
 
+export interface CollaborationMessage {
+  id: string;
+  threadId: string;
+  author: string;
+  body: string;
+  mentions: string[];
+  createdAt: string;
+}
+
+export interface CollaborationNotification {
+  id: string;
+  recipient: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export type PartialApprovalScope = 'module' | 'file';
+
+export interface PartialApproval {
+  id: string;
+  scope: PartialApprovalScope;
+  target: string;
+  reviewer: string;
+  status: 'APPROVED' | 'REVOKED';
+  createdAt: string;
+}
+
+export interface MergeDecision {
+  blocked: boolean;
+  reasons: string[];
+  updatedAt: string;
+}
+
 export interface GitContext {
   currentBranch: string;
   baseBranch: string;
@@ -117,6 +154,10 @@ export interface ReviewSession {
   activeNavigation?: ReviewNavigationTarget;
   comments: ReviewComment[];
   findings: ValidationFinding[];
+  collaborationMessages: CollaborationMessage[];
+  notifications: CollaborationNotification[];
+  partialApprovals: PartialApproval[];
+  mergeDecision: MergeDecision;
   history: ReviewHistoryEntry[];
 }
 
@@ -166,6 +207,10 @@ export function createReviewSession(input: CreateReviewSessionInput): ReviewSess
     commits: input.git.commits,
     comments: [],
     findings: [],
+    collaborationMessages: [],
+    notifications: [],
+    partialApprovals: [],
+    mergeDecision: { blocked: false, reasons: [], updatedAt: now },
     history: [
       {
         id: `${id}-created`,
@@ -174,6 +219,99 @@ export function createReviewSession(input: CreateReviewSessionInput): ReviewSess
         createdAt: now
       }
     ]
+  };
+}
+
+export function addCollaborationMessage(
+  session: ReviewSession,
+  input: { author: string; body: string; threadId?: string; now?: Date; id?: string }
+): ReviewSession {
+  if (!input.author.trim()) throw new Error('O autor da mensagem e obrigatorio.');
+  if (!input.body.trim()) throw new Error('A mensagem colaborativa nao pode ser vazia.');
+
+  const createdAt = (input.now ?? new Date()).toISOString();
+  const messages = session.collaborationMessages ?? [];
+  const notifications = session.notifications ?? [];
+  const id = input.id ?? `${session.id}-collab-${messages.length + 1}`;
+  const mentions = extractMentions(input.body);
+  const message: CollaborationMessage = {
+    id,
+    threadId: input.threadId ?? id,
+    author: input.author.trim(),
+    body: input.body.trim(),
+    mentions,
+    createdAt
+  };
+
+  return {
+    ...session,
+    collaborationMessages: [...messages, message],
+    notifications: [
+      ...notifications,
+      ...mentions.map((mention, index) => ({
+        id: `${id}-mention-${index + 1}`,
+        recipient: mention,
+        message: `${message.author} mencionou voce na review ${session.sourceBranch}`,
+        read: false,
+        createdAt
+      }))
+    ],
+    updatedAt: createdAt,
+    history: appendHistory(session, 'COLLABORATION_MESSAGE_ADDED', `Mensagem colaborativa adicionada por ${message.author}`, createdAt)
+  };
+}
+
+export function registerPartialApproval(
+  session: ReviewSession,
+  input: { scope: PartialApprovalScope; target: string; reviewer: string; now?: Date; id?: string }
+): ReviewSession {
+  if (!input.target.trim()) throw new Error('O alvo da aprovacao parcial e obrigatorio.');
+  if (!input.reviewer.trim()) throw new Error('O reviewer da aprovacao parcial e obrigatorio.');
+
+  const createdAt = (input.now ?? new Date()).toISOString();
+  const approvals = session.partialApprovals ?? [];
+  const approval: PartialApproval = {
+    id: input.id ?? `${session.id}-approval-${approvals.length + 1}`,
+    scope: input.scope,
+    target: input.target.trim(),
+    reviewer: input.reviewer.trim(),
+    status: 'APPROVED',
+    createdAt
+  };
+  const updated = {
+    ...session,
+    partialApprovals: [...approvals.filter((item) => !(item.scope === approval.scope && item.target === approval.target)), approval],
+    updatedAt: createdAt,
+    history: appendHistory(session, 'PARTIAL_APPROVAL_REGISTERED', `Aprovacao por ${approval.scope}: ${approval.target}`, createdAt)
+  };
+
+  return updateMergeDecision(updated, new Date(createdAt));
+}
+
+export function updateMergeDecision(session: ReviewSession, now = new Date()): ReviewSession {
+  const updatedAt = now.toISOString();
+  const findings = session.findings ?? [];
+  const reasons: string[] = [];
+
+  const criticalOpen = findings.filter((finding) => finding.severity === 'CRITICAL' && finding.status !== 'APPROVED');
+  const highOpen = findings.filter((finding) => finding.severity === 'HIGH' && finding.status !== 'APPROVED');
+
+  if (criticalOpen.length) reasons.push(`${criticalOpen.length} validacao critica pendente`);
+  if (highOpen.length) reasons.push(`${highOpen.length} validacao alta pendente`);
+
+  const changedFiles = session.changedFiles ?? [];
+  const approvals = session.partialApprovals ?? [];
+  const unapprovedFiles = changedFiles.filter((file) => !approvals.some((approval) => approval.scope === 'file' && approval.target === file && approval.status === 'APPROVED'));
+
+  if (changedFiles.length && unapprovedFiles.length) reasons.push(`${unapprovedFiles.length} arquivo(s) sem aprovacao parcial`);
+
+  const blocked = reasons.length > 0;
+
+  return {
+    ...session,
+    mergeDecision: { blocked, reasons, updatedAt },
+    updatedAt,
+    history: appendHistory(session, 'MERGE_BLOCK_UPDATED', blocked ? 'Merge bloqueado por pendencias de review' : 'Merge liberado para a sessao', updatedAt)
   };
 }
 
@@ -465,6 +603,10 @@ function validateFindingInput(input: CreateValidationFindingInput): void {
   if (!Number.isInteger(input.line) || input.line < 1) throw new Error('A linha da validacao deve ser maior que zero.');
   if (!input.commit.trim()) throw new Error('O commit da validacao e obrigatorio.');
   if (!input.responsible.trim()) throw new Error('O responsavel da validacao e obrigatorio.');
+}
+
+function extractMentions(body: string): string[] {
+  return Array.from(new Set(Array.from(body.matchAll(/@([a-zA-Z0-9_.-]+)/g)).map((match) => match[1])));
 }
 
 function findFinding(session: ReviewSession, findingId: string): { finding: ValidationFinding; findings: ValidationFinding[] } {

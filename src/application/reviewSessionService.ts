@@ -5,6 +5,7 @@ import {
 } from '../domain/architectureRules';
 import {
   addReviewComment,
+  addCollaborationMessage,
   createReviewSession,
   createValidationFinding,
   editReviewComment,
@@ -15,11 +16,14 @@ import {
   ReviewNavigationTarget,
   ReviewSession,
   ReviewSessionStatus,
+  PartialApprovalScope,
+  registerPartialApproval,
   updateValidationFindingStatus,
   ValidationFindingStatus,
   ValidationSeverity,
   updateReviewSessionGitContext,
-  updateReviewSessionStatus
+  updateReviewSessionStatus,
+  updateMergeDecision
 } from '../domain/reviewSession';
 import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
 import { AssistedIntelligenceReport, buildAssistedIntelligenceReport } from './assistedIntelligence';
@@ -190,6 +194,27 @@ export class ReviewSessionService {
 
     await this.repository.saveCurrent(updated);
     return { session: updated, findings };
+  }
+
+  async addCollaborationMessage(id: string, input: { author: string; body: string; threadId?: string }): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = addCollaborationMessage(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async approvePartial(id: string, input: { scope: PartialApprovalScope; target: string; reviewer: string }): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = registerPartialApproval(session, input);
+    await this.repository.saveCurrent(updated);
+    return updated;
+  }
+
+  async refreshMergeDecision(id: string): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = updateMergeDecision(session);
+    await this.repository.saveCurrent(updated);
+    return updated;
   }
 
   private async getExistingSession(id: string): Promise<ReviewSession> {

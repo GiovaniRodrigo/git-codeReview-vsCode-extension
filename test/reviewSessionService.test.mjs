@@ -128,6 +128,29 @@ test('runs architecture validation and stores findings in the session', async ()
   assert.ok(result.session.findings.some((finding) => finding.rule === 'DIP'));
 });
 
+test('manages collaboration messages partial approvals and merge decision', async () => {
+  const service = new ReviewSessionService(new MemoryReviewSessionRepository(), new StaticGitService({
+    ...git,
+    changedFiles: ['src/extension.ts']
+  }));
+  const session = await service.startReview('Developer', 'Reviewer');
+
+  const withMessage = await service.addCollaborationMessage(session.id, {
+    author: 'Reviewer',
+    body: 'Ajuste alinhado com @dev'
+  });
+  const approved = await service.approvePartial(session.id, {
+    scope: 'file',
+    target: 'src/extension.ts',
+    reviewer: 'Reviewer'
+  });
+  const decision = await service.refreshMergeDecision(session.id);
+
+  assert.equal(withMessage.notifications.length, 1);
+  assert.equal(approved.partialApprovals.length, 1);
+  assert.equal(decision.mergeDecision.blocked, false);
+});
+
 class StaticGitService {
   constructor(context) {
     this.context = context;
