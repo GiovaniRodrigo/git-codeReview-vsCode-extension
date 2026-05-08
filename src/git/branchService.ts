@@ -18,6 +18,10 @@ export class BranchService {
     return parseBranchList(output, "remote").filter((branch) => !branch.name.endsWith("/HEAD"));
   }
 
+  public async fetchRemoteBranches(rootPath: string): Promise<void> {
+    await this.git.run(["fetch", "--all", "--prune"], rootPath);
+  }
+
   public async listTags(rootPath: string): Promise<TagSummary[]> {
     const output = await this.git.run(["tag", "--format", tagFormat], rootPath);
     return parseTagList(output);

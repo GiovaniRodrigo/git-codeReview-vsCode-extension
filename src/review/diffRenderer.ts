@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { GitService } from "../git/gitService";
+import { getCommonStyles } from "./styles";
 
 export class DiffRenderer {
   public constructor(private readonly git: GitService) {}
@@ -14,11 +15,29 @@ export class DiffRenderer {
     const panel = vscode.window.createWebviewPanel("codeReview.githubDiff", `Diff ${hash.slice(0, 8)}`, vscode.ViewColumn.One, {
       enableScripts: false
     });
-    panel.webview.html = renderPatch(patch || "Sem diff para exibir.");
+    panel.webview.html = renderPatch(patch || "");
   }
 }
 
 function renderPatch(patch: string): string {
+  if (!patch) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diff</title>
+  <style>${getCommonStyles()}</style>
+</head>
+<body>
+  <div class="placeholder">
+    <div class="placeholder-title">No changes to display.</div>
+    <div class="placeholder-text">This commit might not have any file changes or the file is identical.</div>
+  </div>
+</body>
+</html>`;
+  }
+
   const lines = patch.split(/\r?\n/);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -27,10 +46,8 @@ function renderPatch(patch: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Diff</title>
   <style>
+    ${getCommonStyles()}
     body {
-      margin: 0;
-      color: var(--vscode-foreground);
-      background: var(--vscode-editor-background);
       font-family: var(--vscode-editor-font-family);
       font-size: var(--vscode-editor-font-size);
     }
@@ -39,17 +56,17 @@ function renderPatch(patch: string): string {
       padding: 2px 8px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      border-bottom: 1px solid var(--vscode-panel-border);
+      border-bottom: 1px solid var(--border);
     }
     .ln {
       width: 1%;
-      color: var(--vscode-descriptionForeground);
+      color: var(--muted);
       text-align: right;
       user-select: none;
     }
     .add { background: rgba(46, 160, 67, 0.18); }
     .del { background: rgba(248, 81, 73, 0.18); }
-    .meta { color: var(--vscode-descriptionForeground); background: var(--vscode-sideBar-background); }
+    .meta { color: var(--muted); background: var(--vscode-sideBar-background); }
   </style>
 </head>
 <body>

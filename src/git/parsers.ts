@@ -1,4 +1,4 @@
-import { BranchSummary, CommitFileChange, CommitFileStatus, CommitSummary, TagSummary } from "./types";
+import { BranchSummary, CommitFileChange, CommitFileStatus, CommitSummary, GitTreeInfo, TagSummary } from "./types";
 
 const fieldSeparator = "\u001f";
 
@@ -71,6 +71,48 @@ export function parseCommitFiles(nameStatusOutput: string, numstatOutput: string
     });
 }
 
+export function parseGitTreeStatus(rootPath: string, statusOutput: string, head?: string): GitTreeInfo {
+  const lines = statusOutput.split(/\r?\n/).filter(Boolean);
+  const branchLine = lines.find((line) => line.startsWith("## ")) ?? "## HEAD";
+  const branchInfo = parseBranchStatus(branchLine.slice(3));
+  const counts = {
+    staged: 0,
+    unstaged: 0,
+    untracked: 0,
+    conflicts: 0
+  };
+
+  for (const line of lines.filter((item) => !item.startsWith("## "))) {
+    const x = line.charAt(0);
+    const y = line.charAt(1);
+    if (x === "?" && y === "?") {
+      counts.untracked += 1;
+      continue;
+    }
+    if (isConflictStatus(x, y)) {
+      counts.conflicts += 1;
+      continue;
+    }
+    if (x !== " " && x !== "?") {
+      counts.staged += 1;
+    }
+    if (y !== " " && y !== "?") {
+      counts.unstaged += 1;
+    }
+  }
+
+  return {
+    rootPath,
+    currentBranch: branchInfo.currentBranch,
+    upstream: branchInfo.upstream,
+    head,
+    ahead: branchInfo.ahead,
+    behind: branchInfo.behind,
+    ...counts,
+    isClean: counts.staged === 0 && counts.unstaged === 0 && counts.untracked === 0 && counts.conflicts === 0
+  };
+}
+
 function normalizeBranchName(name: string, type: BranchSummary["type"]): string {
   if (type === "remote") {
     return name.replace(/^refs\/remotes\//, "");
@@ -124,4 +166,37 @@ function normalizeNumstatPath(path: string): string {
 
   const [, prefix, , next, suffix] = renameMatch;
   return `${prefix}${next}${suffix}`;
+}
+
+function parseBranchStatus(value: string): { currentBranch: string; upstream?: string; ahead: number; behind: number } {
+  const trackingMatch = value.match(/^(.+?)\.\.\.(.+?)(?: \[(.+)\])?$/);
+  if (trackingMatch) {
+    const [, currentBranch, upstream, tracking] = trackingMatch;
+    return {
+      currentBranch,
+      upstream,
+      ahead: parseTrackingCount(tracking, "ahead"),
+      behind: parseTrackingCount(tracking, "behind")
+    };
+  }
+
+  const noCommitsMatch = value.match(/^No commits yet on (.+)$/);
+  if (noCommitsMatch) {
+    return { currentBranch: noCommitsMatch[1], ahead: 0, behind: 0 };
+  }
+
+  return { currentBranch: value, ahead: 0, behind: 0 };
+}
+
+function parseTrackingCount(value: string | undefined, key: "ahead" | "behind"): number {
+  if (!value) {
+    return 0;
+  }
+
+  const match = value.match(new RegExp(`${key} (\\d+)`));
+  return match ? Number.parseInt(match[1], 10) : 0;
+}
+
+function isConflictStatus(x: string, y: string): boolean {
+  return ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(`${x}${y}`);
 }

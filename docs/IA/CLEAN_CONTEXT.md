@@ -1,124 +1,72 @@
-# CLEAN_CONTEXT: Code Review Extension
+# CLEAN_CONTEXT: Git Code Review Extension
 
-## 1. Visao Geral e Objetivo
+## 1. Visão Geral e Objetivo
 
-**Dominio:** extensao de produtividade para VS Code focada em Git, GitHub e code review.
+**Domínio:** Code Review and Git productivity.
 
-**Objetivo:** permitir que desenvolvedores visualizem branches, commits, tags, alteracoes, diffs, pull requests e comentarios de review diretamente no VS Code.
+**Objetivo:** Enhance the code review process within VS Code using Git data, providing a seamless experience for reviewing commits, files, and branches.
 
-**Stack alvo:** TypeScript, VS Code Extension API, Git CLI/local repository, GitHub REST API, Webview API, TreeView API, testes automatizados com a stack padrao de extensoes VS Code.
+**Stack atual:** TypeScript, VS Code API, Git.
 
-**Estado atual:** Roadmap implementado localmente ate empacotamento VSIX. Ha scaffold de extensao VS Code em TypeScript, TreeView no container de Source Control, servicos Git locais, provider de conteudo para diff nativo, Webview de review, integracao GitHub com PRs/checks/review actions, produtividade local, cache, background refresh, artefatos de publicacao e testes unitarios.
+## 2. Entidades de Negócio Core
 
-## 2. Entidades Core
+### Review
 
-### Repository
-
-- `rootPath`: caminho do repositorio aberto no VS Code.
-- `remotes`: lista de remotes Git configurados.
-- `isGitRepository`: indica se o workspace atual possui `.git`.
-
-### Branch
-
-- `name`: nome da branch local ou remota.
-- `type`: local ou remote.
-- `upstream`: branch remota relacionada, quando existir.
-- `headCommit`: commit atual da branch.
+- Represents a code review session.
+- Tracks progress and state of the review.
 
 ### Commit
 
-- `hash`: hash completo ou abreviado.
-- `message`: mensagem do commit.
-- `author`: nome e email do autor.
-- `date`: data do commit.
-- `changedFiles`: arquivos alterados no commit.
-- `stats`: linhas adicionadas e removidas.
+- A Git commit being reviewed.
+- Contains metadata and diff information.
 
-### ChangedFile
+### File
 
-- `path`: caminho do arquivo no repositorio.
-- `status`: adicionado, modificado, removido, renomeado ou copiado.
-- `additions`: linhas adicionadas.
-- `deletions`: linhas removidas.
+- A file changed within a commit or branch.
+- Contains the diff content and review status.
 
-### PullRequest
+### Branch
 
-- `number`: numero do PR no GitHub.
-- `title`: titulo do PR.
-- `state`: aberto, fechado, mergeado ou draft.
-- `branch`: branch de origem.
-- `baseBranch`: branch de destino.
-- `checks`: status de CI quando disponivel.
+- A Git branch used as a base or target for comparison.
 
-### ReviewComment
+### Tag
 
-- `body`: conteudo do comentario.
-- `filePath`: arquivo comentado.
-- `line`: linha comentada.
-- `author`: autor do comentario.
-- `state`: comentario existente, pendente ou enviado.
+- A Git tag used for versioning and comparison.
 
-## 3. Regras Inegociaveis
+## 3. Regras de Negócio Inegociáveis
 
-| ID | Regra | Restricao |
+| ID | Regra | Restrição |
 | --- | --- | --- |
-| RN01 | Git local primeiro | O MVP deve funcionar usando Git local antes de depender de GitHub. |
-| RN02 | Workspace Git obrigatorio | Funcionalidades Git devem tratar claramente a ausencia de repositorio aberto. |
-| RN03 | Leitura antes de escrita | A extensao deve priorizar navegacao e visualizacao antes de permitir comentarios ou acoes de review. |
-| RN04 | Integracao VS Code nativa | Diffs devem abrir usando recursos do VS Code sempre que possivel. |
-| RN05 | Falhas explicitas | Erros de Git, autenticacao ou API devem ser exibidos de forma clara ao usuario. |
-| RN06 | Escopo incremental | Cada fase deve entregar valor isolado e validavel antes da proxima fase. |
+| RN01 | Imutabilidade do Model | O Model deve ser uma interface pura e imutável. |
+| RN02 | Separação de Concerns | O Controller não deve conter lógica de negócio, delegando ao Document. |
+| RN03 | AI Opt-in | AI features MUST be disabled by default. |
+| RN04 | Data Privacy | Only diff and metadata are sent to the AI provider. |
+| RN05 | Manual Trigger | AI analysis must be triggered manually by the user. |
+| RN06 | AI Result Caching | AI results must be cached locally (per hash/path). |
 
-## 4. Padroes de Implementacao
+## 4. Padrões de Implementação
 
-**Arquitetura alvo:** camadas simples por responsabilidade, evitando acoplamento direto entre UI, Git local e GitHub API.
+**Arquitetura alvo:** Model-Document-Controller (MDC).
 
 Camadas principais:
 
-- `src/extension.ts`: ativacao da extensao, registro de comandos e providers.
-- `src/git/`: comandos Git locais e normalizacao de dados.
-- `src/github/`: autenticacao e chamadas para GitHub REST API.
-- `src/tree/`: TreeView lateral para branches, commits e arquivos.
-- `src/review/`: Webview, renderizacao de diff e fluxo de review.
-- `src/utils/`: helpers compartilhados, tratamento de erro e formatadores.
-- `test/` ou `src/test/`: testes unitarios e de integracao conforme scaffold da extensao.
+- `src/review/`: Review module (MDC) for managing the review process.
+- `src/productivity/`: Productivity/Compare module (MDC) for branch and commit comparison.
+- `src/git/`: Git services and parsers for interacting with the Git CLI.
+- `src/github/` & `src/gitlab/`: Remote provider integrations for PR/MR support.
+- `src/ai/`: AI service layer for diff analysis and summaries.
 
-**Estilo de codigo:**
+**Estilo de código:** TypeScript strict mode, functional transformations in Models, event-driven communication between Document and Controller.
 
-- TypeScript com tipos explicitos nos contratos principais.
-- Servicos sem dependencia direta de UI quando possivel.
-- Comandos Git encapsulados em servicos testaveis.
-- Tratamento de erro centralizado o suficiente para mensagens consistentes.
-- Mudancas pequenas, alinhadas a fase atual do roadmap.
+**Documentação:** novas funcionalidades devem sincronizar regras de negócio, plano de implementação e testes.
 
-**Documentacao:** funcionalidades novas devem manter `ROADMAP.md`, `IA/CLEAN_CONTEXT.md` e `IA/IMPLEMENTATION_PLAN.md` sincronizados quando mudarem escopo, arquitetura ou fases.
-
-**Uso de IA:** siga `IA/AI_DEVELOPMENT_PRINCIPLES.md`. IA acelera execucao, mas arquitetura, testes, debugging e validacao continuam exigindo julgamento de engenharia.
+**Uso de IA:** siga `docs/IA/AI_DEVELOPMENT_PRINCIPLES.md`; IA acelera execução, mas arquitetura, testes, debugging, validação e produção continuam exigindo julgamento de engenharia.
 
 ## 5. Mapeamento de Arquivos Atuais
 
-- `ROADMAP.md`: roadmap funcional completo da extensao.
-- `package.json`: manifesto da extensao, contribuicoes para VS Code e scripts de desenvolvimento.
-- `tsconfig.json`: configuracao TypeScript.
-- `src/extension.ts`: ativacao da extensao, comandos e TreeView.
-- `src/git/`: servicos Git locais, contratos e parsers.
-- `src/tree/`: provider e nodes da TreeView.
-- `src/review/`: provider de documentos virtuais para diff.
-- `src/review/reviewPanel.ts`: Webview de review com metadata, estatisticas, filtros, busca e selecao multipla.
-- `src/review/reviewModel.ts`: agregacao de commits para o painel de review.
-- `src/review/diffRenderer.ts`: diff estilo GitHub em Webview.
-- `src/github/`: deteccao de remote GitHub, autenticacao Octokit, PRs, checks e review actions.
-- `src/productivity/`: historico local de commits revisados e comandos de produtividade.
-- `assets/`: icone da extensao.
-- `CHANGELOG.md`: historico de publicacao.
-- `DEMO.md`: roteiro de demonstracao.
-- `src/utils/`: formatacao e tratamento de erros.
-- `test/`: testes unitarios.
-- `IA/README.md`: indice e orientacao da pasta de contexto.
-- `IA/CLEAN_CONTEXT.md`: este resumo operacional.
-- `IA/IMPLEMENTATION_PLAN.md`: plano tecnico e criterios de aceite.
-- `IA/AI_FEATURE_WORKFLOW.md`: fluxo Regra -> Teste -> Codigo.
-- `IA/AI_DEVELOPMENT_PRINCIPLES.md`: principios de desenvolvimento com IA.
-- `IA/RAG_IMPLEMENTATION.md`: ordem de recuperacao de contexto.
-- `IA/GEMINI.md`: instrucoes para agentes compatíveis com Gemini CLI.
-- `IA/USAGE.md`: guia pratico para trabalhar com esta documentacao.
+- `package.json`: Configurações globais e dependências.
+- `docs/IA/AI_DEVELOPMENT_PRINCIPLES.md`: Princípios de uso responsável e produtivo de IA.
+- `docs/IA/IMPLEMENTATION_PLAN.md`: Plano detalhado de implementação.
+- `docs/IA/RAG_IMPLEMENTATION.md`: Fluxo de recuperação de contexto para IA.
+- `docs/IA/AI_FEATURE_WORKFLOW.md`: Fluxo de trabalho (Regra -> Teste -> Código).
+- `docs/IA/CLEAN_CONTEXT.md`: Este arquivo.

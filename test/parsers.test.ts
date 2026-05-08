@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseBranchList, parseCommitFiles, parseCommitLog, parseTagList } from "../src/git/parsers";
+import { parseBranchList, parseCommitFiles, parseCommitLog, parseGitTreeStatus, parseTagList } from "../src/git/parsers";
 
 test("parseBranchList normalizes branches", () => {
   const branches = parseBranchList("main\u001forigin/main\u001fabc123\nfeature/a\u001f\u001fdef456", "local");
@@ -42,4 +42,37 @@ test("parseCommitFiles maps status and stats", () => {
     { path: "src/old.ts", previousPath: undefined, status: "deleted", additions: 0, deletions: 8 },
     { path: "src/b.ts", previousPath: "src/a.ts", status: "renamed", additions: 1, deletions: 1 }
   ]);
+});
+
+test("parseGitTreeStatus reads branch tracking and working tree counts", () => {
+  const info = parseGitTreeStatus("/repo", [
+    "## feature/a...origin/feature/a [ahead 2, behind 1]",
+    "M  src/staged.ts",
+    " M src/unstaged.ts",
+    "MM src/both.ts",
+    "?? src/new.ts",
+    "UU src/conflict.ts"
+  ].join("\n"), "abc123");
+
+  assert.equal(info.rootPath, "/repo");
+  assert.equal(info.currentBranch, "feature/a");
+  assert.equal(info.upstream, "origin/feature/a");
+  assert.equal(info.head, "abc123");
+  assert.equal(info.ahead, 2);
+  assert.equal(info.behind, 1);
+  assert.equal(info.staged, 2);
+  assert.equal(info.unstaged, 2);
+  assert.equal(info.untracked, 1);
+  assert.equal(info.conflicts, 1);
+  assert.equal(info.isClean, false);
+});
+
+test("parseGitTreeStatus handles clean repositories without upstream", () => {
+  const info = parseGitTreeStatus("/repo", "## main", "def456");
+
+  assert.equal(info.currentBranch, "main");
+  assert.equal(info.upstream, undefined);
+  assert.equal(info.ahead, 0);
+  assert.equal(info.behind, 0);
+  assert.equal(info.isClean, true);
 });

@@ -41,4 +41,13 @@ export class GitService {
       return "";
     }
   }
+
+  public async getChangesBetweenRefs(rootPath: string, base: string, head: string): Promise<any[]> {
+    const { parseCommitFiles } = await import("./parsers");
+    const [nameStatusOutput, numstatOutput] = await Promise.all([
+      this.run(["diff", "--name-status", "-M", "-C", `${base}...${head}`], rootPath),
+      this.run(["diff", "--numstat", "-M", "-C", `${base}...${head}`], rootPath)
+    ]);
+    return parseCommitFiles(nameStatusOutput, numstatOutput);
+  }
 }

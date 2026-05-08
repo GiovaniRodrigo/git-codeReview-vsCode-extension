@@ -1,10 +1,9 @@
 {
-  "name": "code-review-extension",
-  "displayName": "Code Review Extension",
+  "name": "git-code-review",
+  "displayName": "Git Code Review Local",
   "description": "Navigate local Git branches, tags, commits, changed files, and diffs from VS Code.",
   "version": "0.0.1",
-  "publisher": "giovani",
-  "private": true,
+  "publisher": "CodeReviewExtension",
   "icon": "assets/icon.png",
   "repository": {
     "type": "git",
@@ -14,17 +13,27 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Source Control"
+    "SCM Providers",
+    "Other"
   ],
   "activationEvents": [
     "onView:codeReviewExplorer",
     "onCommand:codeReview.refresh",
+    "onCommand:codeReview.fetchRemoteBranches",
     "onCommand:codeReview.openReview",
+    "onCommand:codeReview.createReviewProcess",
+    "onCommand:codeReview.resumeReviewProcess",
+    "onCommand:codeReview.completeReviewProcess",
     "onCommand:codeReview.signInGitHub",
+    "onCommand:codeReview.linkGitLab",
     "onCommand:codeReview.openPullRequest",
+    "onCommand:codeReview.openMergeRequest",
     "onCommand:codeReview.approvePullRequest",
     "onCommand:codeReview.requestChanges",
     "onCommand:codeReview.commentPullRequest",
+    "onCommand:codeReview.approveMergeRequest",
+    "onCommand:codeReview.rejectMergeRequest",
+    "onCommand:codeReview.commentMergeRequest",
     "onCommand:codeReview.openCommitDetails",
     "onCommand:codeReview.openFileDiff",
     "onCommand:codeReview.openGithubStyleDiff",
@@ -41,7 +50,33 @@
         "codeReview.telemetry.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable optional telemetry. The extension currently does not send telemetry events."
+          "description": "Enable optional telemetry. Telemetry is disabled by default and only sends events when an endpoint is configured."
+        },
+        "codeReview.telemetry.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "HTTPS endpoint that receives optional telemetry POST requests. Leave empty to disable telemetry sending."
+        },
+        "codeReview.gitlab.customDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Custom GitLab hostnames for self-hosted instances (e.g. git.company.com)."
+        },
+        "codeReview.ai.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI features (summaries, suggestions). AI is disabled by default."
+        },
+        "codeReview.ai.provider": {
+          "type": "string",
+          "default": "mock",
+          "enum": [
+            "mock"
+          ],
+          "description": "AI provider to use for analysis."
         }
       }
     },
@@ -60,8 +95,28 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "codeReview.fetchRemoteBranches",
+        "title": "Code Review: Fetch Remote Branches",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "codeReview.openReview",
         "title": "Code Review: Open Review"
+      },
+      {
+        "command": "codeReview.createReviewProcess",
+        "title": "Code Review: Create Review Process",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "codeReview.resumeReviewProcess",
+        "title": "Code Review: Resume Review Process",
+        "icon": "$(history)"
+      },
+      {
+        "command": "codeReview.completeReviewProcess",
+        "title": "Code Review: Complete Review Process",
+        "icon": "$(pass)"
       },
       {
         "command": "codeReview.signInGitHub",
@@ -69,8 +124,17 @@
         "icon": "$(github-inverted)"
       },
       {
+        "command": "codeReview.linkGitLab",
+        "title": "Code Review: Link GitLab",
+        "icon": "$(gitlab)"
+      },
+      {
         "command": "codeReview.openPullRequest",
         "title": "Code Review: Open Pull Request"
+      },
+      {
+        "command": "codeReview.openMergeRequest",
+        "title": "Code Review: Open Merge Request"
       },
       {
         "command": "codeReview.approvePullRequest",
@@ -83,6 +147,18 @@
       {
         "command": "codeReview.commentPullRequest",
         "title": "Code Review: Comment Pull Request"
+      },
+      {
+        "command": "codeReview.approveMergeRequest",
+        "title": "Code Review: Approve Merge Request"
+      },
+      {
+        "command": "codeReview.rejectMergeRequest",
+        "title": "Code Review: Request Changes (Unapprove)"
+      },
+      {
+        "command": "codeReview.commentMergeRequest",
+        "title": "Code Review: Comment Merge Request"
       },
       {
         "command": "codeReview.openCommitDetails",
@@ -123,24 +199,29 @@
           "group": "navigation"
         },
         {
+          "command": "codeReview.fetchRemoteBranches",
+          "when": "view == codeReviewExplorer",
+          "group": "navigation"
+        },
+        {
           "command": "codeReview.compareBranches",
-          "when": "view == codeReviewExplorer",
-          "group": "navigation"
-        },
-        {
-          "command": "codeReview.showUnreviewed",
-          "when": "view == codeReviewExplorer",
-          "group": "navigation"
-        },
-        {
-          "command": "codeReview.signInGitHub",
           "when": "view == codeReviewExplorer",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
+          "command": "codeReview.fetchRemoteBranches",
+          "when": "view == codeReviewExplorer && viewItem == remoteRefGroup",
+          "group": "inline"
+        },
+        {
           "command": "codeReview.openReview",
+          "when": "view == codeReviewExplorer && viewItem =~ /reviewable/",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.createReviewProcess",
           "when": "view == codeReviewExplorer && viewItem =~ /reviewable/",
           "group": "inline"
         },
@@ -183,6 +264,26 @@
           "command": "codeReview.commentPullRequest",
           "when": "view == codeReviewExplorer && viewItem == pullRequest",
           "group": "inline"
+        },
+        {
+          "command": "codeReview.approveMergeRequest",
+          "when": "view == codeReviewExplorer && viewItem == mergeRequest",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.rejectMergeRequest",
+          "when": "view == codeReviewExplorer && viewItem == mergeRequest",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.commentMergeRequest",
+          "when": "view == codeReviewExplorer && viewItem == mergeRequest",
+          "group": "inline"
+        },
+        {
+          "command": "codeReview.openMergeRequest",
+          "when": "view == codeReviewExplorer && viewItem == mergeRequest",
+          "group": "inline"
         }
       ]
     },
@@ -197,6 +298,26 @@
         "command": "codeReview.compareBranches",
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c"
+      },
+      {
+        "command": "codeReview.runComplianceValidation",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
+      },
+      {
+        "command": "codeReview.applyArchitectureCorrection",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "codeReview.showTelemetryHistory",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t"
+      },
+      {
+        "command": "codeReview.runAiReview",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i"
       }
     ]
   },

@@ -1,44 +1,39 @@
-# Instrucoes do Projeto para IA
+# Instruções do Projeto (GEMINI.md)
 
-Este arquivo contem mandatos fundamentais para agentes de IA trabalhando no projeto **Code Review Extension**.
+Este arquivo contém mandatos fundamentais que regem o comportamento da IA neste repositório.
 
 ## Prioridade de Contexto
 
-Siga a hierarquia definida em `IA/RAG_IMPLEMENTATION.md`:
+Siga rigorosamente a hierarquia definida em `docs/IA/RAG_IMPLEMENTATION.md`:
+1. Mensagem mais recente do usuário.
+2. `docs/IA/CLEAN_CONTEXT.md`.
+3. `docs/IA/AI_DEVELOPMENT_PRINCIPLES.md`.
+4. Regras de negócio em `docs/IA/`.
+5. `docs/IA/IMPLEMENTATION_PLAN.md`.
 
-1. Mensagem mais recente do usuario.
-2. `IA/CLEAN_CONTEXT.md`.
-3. `ROADMAP.md`.
-4. `IA/IMPLEMENTATION_PLAN.md`.
-5. `IA/AI_DEVELOPMENT_PRINCIPLES.md`.
+## Princípios de Uso da IA
 
-## Principios de Uso da IA
+- Use IA como amplificador de engenharia, não como substituto de arquitetura, testes, revisão, debugging ou responsabilidade por produção.
+- Trabalhe em ciclos pequenos, incrementais e verificáveis.
+- Não dependa de "prompt mágico"; decomponha problemas, explicite critérios de aceite e valide cada entrega.
+- Revise, teste e meça tudo que for relevante antes de considerar a tarefa concluída.
 
-- Use IA como amplificador de engenharia, nao como substituto de arquitetura, testes, revisao ou debugging.
-- Trabalhe em ciclos pequenos e verificaveis.
-- Priorize o MVP Git local antes de dependencias com GitHub.
-- Preserve a separacao entre servicos Git, servicos GitHub e UI do VS Code.
-- Revise, teste e meça tudo que for relevante antes de considerar a tarefa concluida.
+## Fluxo de Trabalho Obrigatório
 
-## Fluxo de Trabalho
+Toda implementação deve seguir o protocolo definido em `docs/IA/AI_FEATURE_WORKFLOW.md`:
+1. **Identificar/Definir Regra de Negócio** (Aprovação necessária).
+2. **Criar/Atualizar Testes** (Aprovação necessária).
+3. **Implementar Código de Produção** (Aprovação necessária).
 
-Toda implementacao deve considerar `IA/AI_FEATURE_WORKFLOW.md`:
+## Manutenção de Documentação
 
-1. Identificar a fase e a regra de produto.
-2. Criar ou atualizar testes quando houver scaffold.
-3. Implementar no menor escopo possivel.
-4. Executar validacoes.
-5. Sincronizar documentacao afetada.
+- Ao alterar o código, você é responsável por identificar quais documentos em `docs/` tornaram-se obsoletos.
+- Proponha e aplique as atualizações na documentação simultaneamente ao código.
+- Mantenha o `docs/IA/CLEAN_CONTEXT.md` sempre sincronizado com a realidade da stack e das entidades core.
 
-## Manutencao de Documentacao
+## Padrões de Código
 
-- Ao alterar codigo, identifique quais documentos ficaram desatualizados.
-- Atualize `IA/CLEAN_CONTEXT.md` quando a stack, contratos ou arquitetura mudarem.
-- Atualize `IA/IMPLEMENTATION_PLAN.md` quando uma fase avancar ou mudar de escopo.
-- Atualize `ROADMAP.md` quando uma tarefa for concluida ou redefinida.
-
-## Padroes de Codigo
-
-- Siga os padroes identificados em `IA/CLEAN_CONTEXT.md`.
-- Priorize mudancas cirurgicas e evite refatoracoes globais nao solicitadas.
-- Garanta que novos arquivos sigam a estrutura esperada para extensoes VS Code em TypeScript.
+- Siga os padrões identificados no `CLEAN_CONTEXT.md` do projeto.
+- Priorize mudanças cirúrgicas e evite refatorações globais não solicitadas.
+- Use refatorações frequentes quando elas preservarem comportamento, reduzirem complexidade real e estiverem protegidas por testes.
+- Garanta que todos os novos arquivos sigam as convenções de nomenclatura e estrutura do projeto.

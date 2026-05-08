@@ -1,6 +1,6 @@
-# Principios de Desenvolvimento com IA - Code Review Extension
+# Principios de Desenvolvimento com IA - Modelo
 
-Este documento define a mentalidade e os limites para uso de IA no desenvolvimento do projeto **Code Review Extension**.
+Este documento define a mentalidade e os limites para uso de IA no desenvolvimento do projeto **Git Code Review Extension**.
 
 ## 1. IA como amplificador, nao substituto
 
@@ -34,7 +34,7 @@ Refatoracoes devem:
 - ter cobertura de testes suficiente;
 - manter escopo rastreavel;
 - evitar mudancas globais sem justificativa;
-- respeitar a arquitetura definida em `IA/CLEAN_CONTEXT.md`.
+- respeitar a arquitetura definida em `docs/IA/CLEAN_CONTEXT.md`.
 
 ## 4. Testes e validacao obrigatorios
 
