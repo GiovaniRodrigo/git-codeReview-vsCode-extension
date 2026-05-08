@@ -3,15 +3,18 @@
   "displayName": "Code Review Extension",
   "description": "Navigate local Git branches, tags, commits, changed files, and diffs from VS Code.",
   "version": "0.0.1",
-  "publisher": "local",
+  "publisher": "giovani",
   "private": true,
   "icon": "assets/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GiovaniRodrigo/git-codeReview-vsCode-extension.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
-    "SCM Providers",
-    "Other"
+    "Source Control"
   ],
   "activationEvents": [
     "onView:codeReviewExplorer",
