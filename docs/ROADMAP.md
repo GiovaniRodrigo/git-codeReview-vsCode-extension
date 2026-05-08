@@ -1,0 +1,467 @@
+# ROADMAP — Extensão de Code Review
+
+## Legenda
+
+* [ ] Não iniciado
+* [x] Concluído
+* [~] Em andamento
+
+# Visão Geral
+
+Este roadmap define a evolução planejada da extensão de Code Review integrada ao VS Code.
+
+Objetivos principais:
+
+* melhorar produtividade do reviewer;
+* reduzir carga cognitiva;
+* padronizar validações arquiteturais;
+* aumentar rastreabilidade;
+* registrar histórico técnico;
+* fornecer métricas e telemetria.
+
+---
+
+# Fase 1 — Fundação do Sistema
+
+## Objetivo
+
+Construir a base estrutural da extensão.
+
+---
+
+## Funcionalidades
+
+### Integração VS Code
+
+* [ ] Inicialização da extensão
+* [ ] Sidebar principal
+* [ ] Registro de comandos
+* [ ] Atalhos padrão
+* [ ] Webview principal
+* [ ] Persistência local
+
+---
+
+### Integração Git
+
+* [ ] Leitura de branch atual
+* [ ] Identificação de PR
+* [ ] Comparação de diffs
+* [ ] Navegação por commits
+* [ ] Navegação por arquivos alterados
+
+---
+
+### Estrutura Base
+
+* [ ] Arquitetura modular
+* [ ] Separação frontend/backend
+* [ ] Sistema de eventos
+* [ ] Sistema de estado
+* [ ] Configuração inicial
+
+---
+
+# Fase 2 — Sistema de Review
+
+## Objetivo
+
+Permitir criação e gerenciamento de sessões de revisão.
+
+---
+
+## Funcionalidades
+
+### Sessões de Review
+
+* [ ] Criar review session
+* [ ] Abrir review existente
+* [ ] Listar reviews
+* [ ] Timeline da revisão
+* [ ] Status da revisão
+
+---
+
+### Navegação
+
+* [ ] Navegação por commit
+* [ ] Navegação por diff
+* [ ] Navegação por arquivos
+* [ ] Navegação por comentários
+* [ ] Navegação por validações
+
+---
+
+### Comentários
+
+* [ ] Inserir comentário
+* [ ] Editar comentário
+* [ ] Histórico de comentários
+* [ ] Threads de discussão
+* [ ] Comentários vinculados ao código
+
+---
+
+# Fase 3 — Sistema de Validações
+
+## Objetivo
+
+Registrar não conformidades e permitir revalidação.
+
+---
+
+## Funcionalidades
+
+### Validation Findings
+
+* [ ] Criar validação
+* [ ] Definir severidade
+* [ ] Definir status
+* [ ] Associar arquivo e linha
+* [ ] Associar commit
+
+---
+
+### Status
+
+* [ ] NEEDS_CHANGES
+* [ ] FIXED
+* [ ] APPROVED
+* [ ] REOPENED
+
+---
+
+### Correções
+
+* [ ] Registrar tentativa de correção
+* [ ] Histórico de correções
+* [ ] Revalidação
+* [ ] Reabertura de finding
+
+---
+
+# Fase 4 — UX/UI Avançada
+
+## Objetivo
+
+Melhorar experiência visual e produtividade.
+
+---
+
+## Funcionalidades
+
+### Material Design 3
+
+* [ ] Implementação M3
+* [ ] Tokens visuais
+* [ ] Tipografia
+* [ ] Sistema de cores
+* [ ] Elevação
+
+---
+
+### Componentes
+
+* [ ] Cards
+* [ ] Chips
+* [ ] Badges
+* [ ] Tabs
+* [ ] Timeline
+* [ ] Snackbar
+* [ ] Tooltips
+
+---
+
+### Experiência de Uso
+
+* [ ] Navegação reduzida
+* [ ] Feedback em tempo real
+* [ ] Loading states
+* [ ] Skeleton loading
+* [ ] Animações suaves
+
+---
+
+# Fase 5 — Métricas e Telemetria
+
+## Objetivo
+
+Registrar dados de qualidade arquitetural.
+
+---
+
+## Funcionalidades
+
+### Métricas
+
+* [ ] Score de qualidade
+* [ ] Frequência de erros
+* [ ] Taxa de reincidência
+* [ ] Tempo médio de correção
+* [ ] Quantidade de findings
+
+---
+
+### Dashboards
+
+* [ ] Dashboard geral
+* [ ] Dashboard arquitetural
+* [ ] Dashboard por reviewer
+* [ ] Dashboard por desenvolvedor
+* [ ] Histórico temporal
+
+---
+
+### Coleta de Dados
+
+* [ ] Eventos de validação
+* [ ] Eventos de correção
+* [ ] Eventos de aprovação
+* [ ] Eventos de reabertura
+* [ ] Persistência analítica
+
+---
+
+# Fase 6 — Regras Arquiteturais
+
+## Objetivo
+
+Automatizar validações técnicas.
+
+---
+
+## Funcionalidades
+
+### SOLID
+
+* [ ] Verificação SRP
+* [ ] Verificação OCP
+* [ ] Verificação LSP
+* [ ] Verificação ISP
+* [ ] Verificação DIP
+
+---
+
+### Clean Architecture
+
+* [ ] Dependência incorreta
+* [ ] Violação de camadas
+* [ ] Dependência circular
+* [ ] Acoplamento excessivo
+
+---
+
+### DDD
+
+* [ ] Bounded Context
+* [ ] Entidades
+* [ ] Value Objects
+* [ ] Serviços de domínio
+
+---
+
+# Fase 7 — Inteligência Assistida
+
+## Objetivo
+
+Auxiliar reviewer e desenvolvedor.
+
+---
+
+## Funcionalidades
+
+### Sugestões Inteligentes
+
+* [ ] Sugestão de correção
+* [ ] Sugestão arquitetural
+* [ ] Sugestão de refatoração
+* [ ] Explicação da violação
+
+---
+
+### Histórico Inteligente
+
+* [ ] Buscar erros recorrentes
+* [ ] Detectar padrões
+* [ ] Comparar revisões antigas
+* [ ] Recomendação automática
+
+---
+
+# Fase 8 — Colaboração
+
+## Objetivo
+
+Melhorar fluxo entre reviewer e desenvolvedor.
+
+---
+
+## Funcionalidades
+
+### Comunicação
+
+* [ ] Threads colaborativas
+* [ ] Menções
+* [ ] Notificações
+* [ ] Histórico compartilhado
+
+---
+
+### Workflow
+
+* [ ] Aprovação parcial
+* [ ] Aprovação por módulo
+* [ ] Aprovação por arquivo
+* [ ] Bloqueio de merge
+
+---
+
+# Fase 9 — Persistência e Auditoria
+
+## Objetivo
+
+Garantir rastreabilidade completa.
+
+---
+
+## Funcionalidades
+
+### Auditoria
+
+* [ ] Histórico imutável
+* [ ] Registro de ações
+* [ ] Registro de usuário
+* [ ] Registro temporal
+
+---
+
+### Persistência
+
+* [ ] Banco local
+* [ ] Sincronização remota
+* [ ] Exportação de dados
+* [ ] Backup
+
+---
+
+# Fase 10 — Performance
+
+## Objetivo
+
+Garantir escalabilidade e fluidez.
+
+---
+
+## Funcionalidades
+
+### Otimizações
+
+* [ ] Virtualização de listas
+* [ ] Cache local
+* [ ] Lazy loading
+* [ ] Renderização incremental
+* [ ] Processamento assíncrono
+
+---
+
+# Fase 11 — Integrações Futuras
+
+## Objetivo
+
+Expandir ecossistema.
+
+---
+
+## Funcionalidades
+
+### Plataformas
+
+* [ ] GitHub
+* [ ] GitLab
+* [ ] Azure DevOps
+* [ ] Bitbucket
+
+---
+
+### Sistemas
+
+* [ ] Jira
+* [ ] Linear
+* [ ] Slack
+* [ ] Discord
+
+---
+
+# Backlog Futuro
+
+## Estudos
+
+* [ ] IA para análise arquitetural
+* [ ] Análise semântica de código
+* [ ] Sugestão automática de testes
+* [ ] Predição de risco arquitetural
+
+---
+
+# Critérios de Qualidade
+
+## Requisitos obrigatórios
+
+* UI consistente;
+* UX fluida;
+* Baixa latência;
+* Histórico rastreável;
+* Navegação rápida;
+* Compatibilidade com VS Code.
+
+---
+
+# Critérios de Sucesso
+
+| Objetivo                             | Meta |
+| ------------------------------------ | ---- |
+| Redução de tempo de review           | 40%  |
+| Redução de retrabalho                | 30%  |
+| Aumento de conformidade arquitetural | 50%  |
+| Melhoria de rastreabilidade          | 100% |
+| Cobertura de validações              | 90%  |
+
+---
+
+# Tecnologias Planejadas
+
+## Frontend
+
+* React
+* TypeScript
+* Material Design 3
+* shadcn/ui
+* Zustand
+
+---
+
+## Backend
+
+* Node.js
+* VS Code Extension API
+
+---
+
+## Persistência
+
+* SQLite
+* IndexedDB
+
+---
+
+# Arquitetura Planejada
+
+```text
+VS Code Extension
+├── Webview UI
+├── Review Engine
+├── Validation Engine
+├── Telemetry Engine
+├── Persistence Engine
+└── Git Integration
+```
