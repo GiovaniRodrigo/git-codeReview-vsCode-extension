@@ -19,6 +19,8 @@ import {
   PartialApprovalScope,
   registerPartialApproval,
   updateValidationFindingStatus,
+  updateReviewCommentStatus,
+  ReviewCommentStatus,
   ValidationFindingStatus,
   ValidationSeverity,
   updateReviewSessionGitContext,
@@ -152,10 +154,17 @@ export class ReviewSessionService {
 
   async addComment(
     id: string,
-    input: { body: string; author: string; file: string; line: number; commit?: string; threadId?: string }
+    input: { body: string; author: string; file: string; line: number; commit?: string; threadId?: string; severity?: ValidationSeverity; status?: ReviewCommentStatus }
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
     const updated = addReviewComment(session, input);
+    await this.saveAndAudit(updated);
+    return updated;
+  }
+
+  async updateCommentStatus(id: string, commentId: string, status: ReviewCommentStatus): Promise<ReviewSession> {
+    const session = await this.getExistingSession(id);
+    const updated = updateReviewCommentStatus(session, commentId, status);
     await this.saveAndAudit(updated);
     return updated;
   }

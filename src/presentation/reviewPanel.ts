@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { ReviewSessionService } from '../application/reviewSessionService';
 import {
   isReviewSessionStatus,
+  isReviewCommentStatus,
   isValidationFindingStatus,
   isValidationSeverity,
   ReviewNavigationKind
@@ -113,8 +114,23 @@ export class ReviewPanel {
         file: message.payload.file,
         line: message.payload.line,
         commit: typeof message.payload.commit === 'string' ? message.payload.commit : undefined,
-        threadId: typeof message.payload.threadId === 'string' ? message.payload.threadId : undefined
+        threadId: typeof message.payload.threadId === 'string' ? message.payload.threadId : undefined,
+        severity: typeof message.payload.severity === 'string' && isValidationSeverity(message.payload.severity) ? message.payload.severity : undefined,
+        status: typeof message.payload.status === 'string' && isReviewCommentStatus(message.payload.status) ? message.payload.status : undefined
       });
+      await this.refreshReviewDecorations();
+      await this.postState();
+    }
+
+    if (
+      message.type === 'updateReviewCommentStatus'
+      && typeof message.payload?.id === 'string'
+      && typeof message.payload.commentId === 'string'
+      && typeof message.payload.status === 'string'
+      && isReviewCommentStatus(message.payload.status)
+    ) {
+      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status);
+      await this.refreshReviewDecorations();
       await this.postState();
     }
 
@@ -439,7 +455,74 @@ export class ReviewPanel {
 
   private async postState(): Promise<void> {
     const state = await this.service.getDashboardState();
-    this.post({ type: 'dashboardState', payload: state });
+    const vscodeContext = await this.collectVSCodeContext();
+    this.post({ type: 'dashboardState', payload: { ...state, vscode: vscodeContext } });
+  }
+
+  private async collectVSCodeContext(): Promise<{ problems: Array<{ file: string; line: number; severity: string; message: string; source?: string }>; tests: { available: boolean; lastRunStatus: string; lastRunAt?: string } }> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const problems = vscode.languages.getDiagnostics()
+      .filter(([uri]) => !workspaceFolder || uri.fsPath.startsWith(workspaceFolder.uri.fsPath))
+      .flatMap(([uri, diagnostics]) => diagnostics.map((diagnostic) => ({
+        file: workspaceFolder ? vscode.workspace.asRelativePath(uri, false) : uri.fsPath,
+        line: diagnostic.range.start.line + 1,
+        severity: vscode.DiagnosticSeverity[diagnostic.severity] ?? 'Unknown',
+        message: diagnostic.message,
+        source: diagnostic.source
+      })))
+      .slice(0, 200);
+
+    const commands = await vscode.commands.getCommands(true);
+    const testsAvailable = commands.includes('testing.runAll') || commands.some((command) => command.startsWith('testing.'));
+    const lastRun = this.context.workspaceState.get<{ status: string; at?: string }>('codeReview.lastVSCodeTestRun', { status: 'NOT_RUN' });
+
+    return {
+      problems,
+      tests: {
+        available: testsAvailable,
+        lastRunStatus: lastRun.status,
+        lastRunAt: lastRun.at
+      }
+    };
+  }
+
+  private async runVSCodeTests(): Promise<void> {
+    try {
+      await vscode.commands.executeCommand('testing.runAll');
+      await this.context.workspaceState.update('codeReview.lastVSCodeTestRun', { status: 'RUN_REQUESTED', at: new Date().toISOString() });
+      vscode.window.showInformationMessage('Execucao de testes solicitada ao VS Code Test Explorer.');
+    } catch {
+      await this.context.workspaceState.update('codeReview.lastVSCodeTestRun', { status: 'UNAVAILABLE', at: new Date().toISOString() });
+      vscode.window.showWarningMessage('O VS Code Test Explorer nao esta disponivel para este workspace.');
+    }
+  }
+
+  private async refreshReviewDecorations(): Promise<void> {
+    const state = await this.service.getDashboardState();
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !state.currentSession) return;
+
+    const activeFile = vscode.workspace.asRelativePath(editor.document.uri, false);
+    const comments = (state.currentSession.comments ?? []).filter((comment) => comment.file === activeFile);
+    if (!comments.length) return;
+
+    const decoration = vscode.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      overviewRulerLane: vscode.OverviewRulerLane.Right,
+      after: { contentText: '  Code Review', color: new vscode.ThemeColor('editorCodeLens.foreground') },
+      border: '1px solid',
+      borderColor: new vscode.ThemeColor('editorWarning.foreground')
+    });
+
+    editor.setDecorations(decoration, comments.map((comment) => {
+      const line = Math.max(0, comment.line - 1);
+      return {
+        range: new vscode.Range(line, 0, line, 0),
+        hoverMessage: new vscode.MarkdownString(`**Code Review** (${comment.severity}/${comment.status})\n\n${comment.body}`)
+      };
+    }));
+
+    this.context.subscriptions.push(decoration);
   }
 
   private post(message: unknown): void {

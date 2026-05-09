@@ -155,8 +155,12 @@ var REVIEW_SESSION_STATUSES = [
 ];
 var VALIDATION_FINDING_STATUSES = ["NEEDS_CHANGES", "FIXED", "APPROVED", "REOPENED"];
 var VALIDATION_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+var REVIEW_COMMENT_STATUSES = ["OPEN", "NEEDS_CHANGES", "RESOLVED", "APPROVED"];
 function isReviewSessionStatus(value) {
   return REVIEW_SESSION_STATUSES.includes(value);
+}
+function isReviewCommentStatus(value) {
+  return REVIEW_COMMENT_STATUSES.includes(value);
 }
 function createReviewSession(input) {
   if (!input.git.currentBranch) {
@@ -401,11 +405,14 @@ function addReviewComment(session, input) {
     file: input.file,
     line: input.line,
     commit: input.commit,
+    severity: input.severity ?? "MEDIUM",
+    status: input.status ?? "NEEDS_CHANGES",
+    isPublic: true,
     createdAt: updatedAt,
     updatedAt,
     history: []
   };
-  return {
+  return recalculateReviewSessionByComments({
     ...session,
     comments: [...comments, comment],
     updatedAt,
@@ -418,7 +425,29 @@ function addReviewComment(session, input) {
         createdAt: updatedAt
       }
     ]
-  };
+  });
+}
+function updateReviewCommentStatus(session, commentId, status, now = /* @__PURE__ */ new Date()) {
+  const comments = session.comments ?? [];
+  const existing = comments.find((item) => item.id === commentId);
+  if (!existing) {
+    throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+  const updatedAt = now.toISOString();
+  return recalculateReviewSessionByComments({
+    ...session,
+    comments: comments.map((item) => item.id === commentId ? { ...item, status, updatedAt } : item),
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-comment-status-${session.history.length + 1}`,
+        type: "COMMENT_STATUS_CHANGED",
+        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status}`,
+        createdAt: updatedAt
+      }
+    ]
+  });
 }
 function editReviewComment(session, commentId, body, editor, now = /* @__PURE__ */ new Date()) {
   if (!body.trim()) {
@@ -511,6 +540,17 @@ function appendHistory(session, type, message, createdAt) {
     }
   ];
 }
+function recalculateReviewSessionByComments(session) {
+  const comments = session.comments ?? [];
+  const openComments = comments.filter((comment) => comment.status !== "RESOLVED" && comment.status !== "APPROVED");
+  const hasCritical = openComments.some((comment) => comment.severity === "CRITICAL");
+  const hasBlocking = openComments.some((comment) => comment.severity === "HIGH" || comment.status === "NEEDS_CHANGES");
+  const nextStatus = openComments.length === 0 ? "APPROVED" : hasCritical ? "REOPENED" : hasBlocking ? "NEEDS_CHANGES" : "IN_REVIEW";
+  return {
+    ...session,
+    status: nextStatus
+  };
+}
 function updateReviewSessionGitContext(session, git2, now = /* @__PURE__ */ new Date()) {
   const updatedAt = now.toISOString();
   return {
@@ -556,7 +596,10 @@ function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Da
 // src/telemetry/reviewMetrics.ts
 function calculateReviewMetrics(sessions) {
   const findings = sessions.flatMap((session) => session.findings ?? []);
+  const comments = sessions.flatMap((session) => session.comments ?? []);
   const findingsCount = findings.length;
+  const commentsCount = comments.length;
+  const openCommentsCount = comments.filter((comment) => comment.status !== "RESOLVED" && comment.status !== "APPROVED").length;
   const criticalCount = findings.filter((finding2) => finding2.severity === "CRITICAL").length;
   const highCount = findings.filter((finding2) => finding2.severity === "HIGH").length;
   const reopenedCount = findings.filter((finding2) => finding2.statusHistory.some((entry) => entry.status === "REOPENED")).length;
@@ -566,8 +609,10 @@ function calculateReviewMetrics(sessions) {
   const averageCorrectionHours = averageCorrectionTime(findings);
   const eventsCount = sessions.reduce((total, session) => total + session.history.length, 0);
   return {
-    qualityScore: calculateQualityScore(findings),
+    qualityScore: calculateQualityScore(findings, comments),
     findingsCount,
+    commentsCount,
+    openCommentsCount,
     criticalCount,
     highCount,
     reopenedCount,
@@ -582,8 +627,13 @@ function calculateReviewMetrics(sessions) {
     timeline: buildTimeline(findings)
   };
 }
-function calculateQualityScore(findings) {
-  const penalty = findings.reduce((total, finding2) => {
+function calculateQualityScore(findings, comments) {
+  const commentPenalty = comments.reduce((total, comment) => {
+    const severityPenalty = comment.severity === "CRITICAL" ? 20 : comment.severity === "HIGH" ? 12 : comment.severity === "MEDIUM" ? 7 : 3;
+    const statusRelief = comment.status === "APPROVED" ? 0.15 : comment.status === "RESOLVED" ? 0.35 : 1;
+    return total + severityPenalty * statusRelief;
+  }, 0);
+  const penalty = commentPenalty + findings.reduce((total, finding2) => {
     const severityPenalty = finding2.severity === "CRITICAL" ? 22 : finding2.severity === "HIGH" ? 14 : finding2.severity === "MEDIUM" ? 7 : 3;
     const statusRelief = finding2.status === "APPROVED" ? 0.2 : finding2.status === "FIXED" ? 0.5 : 1;
     const reopenPenalty = finding2.statusHistory.filter((entry) => entry.status === "REOPENED").length * 5;
@@ -684,7 +734,9 @@ function buildAssistedIntelligenceReport(currentSession, sessions) {
   const allFindings = sessions.flatMap((session) => session.findings ?? []);
   const recurringErrors = recurringRules(allFindings);
   const suggestions = [
-    ...findings.flatMap((finding2) => suggestionsForFinding(finding2, recurringErrors)),
+    ...findings.flatMap(
+      (finding2) => suggestionsForFinding(finding2, recurringErrors)
+    ),
     ...recurringErrors.map((item, index) => ({
       id: `recurrence-${index + 1}`,
       type: "recurrence",
@@ -695,8 +747,33 @@ function buildAssistedIntelligenceReport(currentSession, sessions) {
   ];
   const patterns = detectPatterns(allFindings);
   const comparisons = compareCurrentWithHistory(currentSession, sessions);
-  const recommendations = buildRecommendations(findings, recurringErrors, patterns);
-  return { suggestions, recurringErrors, patterns, comparisons, recommendations };
+  const hotspots = buildFileHotspots(sessions);
+  const moduleHotspots = buildModuleHotspots(sessions);
+  const correlations = buildCorrelations(currentSession, sessions);
+  const riskAnalysis = buildRiskAnalysis(
+    currentSession,
+    hotspots,
+    moduleHotspots,
+    correlations
+  );
+  const recommendations = buildRecommendations(
+    findings,
+    recurringErrors,
+    patterns,
+    hotspots,
+    correlations
+  );
+  return {
+    suggestions,
+    recurringErrors,
+    patterns,
+    comparisons,
+    recommendations,
+    hotspots,
+    moduleHotspots,
+    correlations,
+    riskAnalysis
+  };
 }
 function suggestionsForFinding(finding2, recurringErrors) {
   const priority = finding2.severity;
@@ -761,42 +838,243 @@ function explanationText(finding2, recurrenceCount) {
 }
 function recurringRules(findings) {
   const counts = /* @__PURE__ */ new Map();
-  findings.forEach((finding2) => counts.set(finding2.rule, (counts.get(finding2.rule) ?? 0) + 1));
+  findings.forEach(
+    (finding2) => counts.set(finding2.rule, (counts.get(finding2.rule) ?? 0) + 1)
+  );
   return Array.from(counts.entries()).filter(([, count]) => count > 1).map(([rule, count]) => ({ rule, count })).sort((a, b) => b.count - a.count || a.rule.localeCompare(b.rule));
 }
 function detectPatterns(findings) {
   const patterns = [];
-  const criticalCount = findings.filter((finding2) => finding2.severity === "CRITICAL").length;
-  const reopenedCount = findings.filter((finding2) => finding2.statusHistory.some((entry) => entry.status === "REOPENED")).length;
-  if (criticalCount >= 2) patterns.push("Concentra\xE7\xE3o de viola\xE7\xF5es cr\xEDticas em revis\xF5es recentes.");
-  if (reopenedCount >= 2) patterns.push("Corre\xE7\xF5es t\xEAm sido reabertas com frequ\xEAncia.");
-  if (recurringRules(findings).length) patterns.push("H\xE1 regras arquiteturais recorrentes que merecem a\xE7\xE3o preventiva.");
+  const criticalCount = findings.filter(
+    (finding2) => finding2.severity === "CRITICAL"
+  ).length;
+  const reopenedCount = findings.filter(
+    (finding2) => finding2.statusHistory.some((entry) => entry.status === "REOPENED")
+  ).length;
+  if (criticalCount >= 2)
+    patterns.push("Concentra\xE7\xE3o de viola\xE7\xF5es cr\xEDticas em revis\xF5es recentes.");
+  if (reopenedCount >= 2)
+    patterns.push("Corre\xE7\xF5es t\xEAm sido reabertas com frequ\xEAncia.");
+  if (recurringRules(findings).length)
+    patterns.push(
+      "H\xE1 regras arquiteturais recorrentes que merecem a\xE7\xE3o preventiva."
+    );
   return patterns;
 }
 function compareCurrentWithHistory(currentSession, sessions) {
   if (!currentSession) return [];
-  const previous = sessions.filter((session) => session.id !== currentSession.id);
-  if (!previous.length) return ["Sem revis\xF5es antigas suficientes para compara\xE7\xE3o."];
+  const previous = sessions.filter(
+    (session) => session.id !== currentSession.id
+  );
+  if (!previous.length)
+    return ["Sem revis\xF5es antigas suficientes para compara\xE7\xE3o."];
   const currentFindings = currentSession.findings?.length ?? 0;
-  const averagePrevious = previous.reduce((total, session) => total + (session.findings?.length ?? 0), 0) / previous.length;
+  const averagePrevious = previous.reduce(
+    (total, session) => total + (session.findings?.length ?? 0),
+    0
+  ) / previous.length;
   const direction = currentFindings > averagePrevious ? "acima" : "abaixo";
-  return [`A sess\xE3o atual est\xE1 ${direction} da m\xE9dia hist\xF3rica de findings (${currentFindings} vs ${averagePrevious.toFixed(1)}).`];
+  return [
+    `A sess\xE3o atual est\xE1 ${direction} da m\xE9dia hist\xF3rica de findings (${currentFindings} vs ${averagePrevious.toFixed(1)}).`
+  ];
 }
-function buildRecommendations(findings, recurringErrors, patterns) {
+function buildRecommendations(findings, recurringErrors, patterns, hotspots = [], correlations = []) {
   const recommendations = [];
-  if (findings.some((finding2) => finding2.severity === "CRITICAL" && finding2.status !== "APPROVED")) {
+  if (findings.some(
+    (finding2) => finding2.severity === "CRITICAL" && finding2.status !== "APPROVED"
+  )) {
     recommendations.push("Bloqueie aprova\xE7\xE3o at\xE9 resolver findings cr\xEDticos.");
   }
   if (recurringErrors.length) {
-    recommendations.push(`Priorize uma melhoria sist\xEAmica para ${recurringErrors[0].rule}.`);
+    recommendations.push(
+      `Priorize uma melhoria sist\xEAmica para ${recurringErrors[0].rule}.`
+    );
   }
   if (patterns.length) {
-    recommendations.push("Inclua uma checagem preventiva no fluxo de review para o padr\xE3o detectado.");
+    recommendations.push(
+      "Inclua uma checagem preventiva no fluxo de review para o padr\xE3o detectado."
+    );
+  }
+  if (hotspots.length) {
+    recommendations.push(
+      `Priorize revis\xE3o guiada no hotspot ${hotspots[0].target}, pois ele concentra ${hotspots[0].riskScore} pontos de risco.`
+    );
+  }
+  if (correlations.some(
+    (item) => item.criticalSignals > 0 && item.openComments > 0
+  )) {
+    recommendations.push(
+      "Cruze coment\xE1rios abertos com Problems/Testes antes de aprovar a sess\xE3o."
+    );
   }
   if (!recommendations.length) {
-    recommendations.push("Mantenha a revis\xE3o incremental e registre decis\xF5es relevantes na timeline.");
+    recommendations.push(
+      "Mantenha a revis\xE3o incremental e registre decis\xF5es relevantes na timeline."
+    );
   }
   return recommendations;
+}
+function buildFileHotspots(sessions) {
+  const byFile = /* @__PURE__ */ new Map();
+  for (const session of sessions) {
+    for (const comment of session.comments ?? []) {
+      const item = ensureHotspot(byFile, comment.file, "file");
+      item.comments += 1;
+      if (comment.severity === "CRITICAL") item.critical += 1;
+      if (comment.status !== "RESOLVED" && comment.status !== "APPROVED")
+        item.riskScore += severityWeight(comment.severity);
+    }
+    for (const finding2 of session.findings ?? []) {
+      const item = ensureHotspot(byFile, finding2.file, "file");
+      item.findings += 1;
+      if (finding2.severity === "CRITICAL") item.critical += 1;
+      if (finding2.status !== "APPROVED" && finding2.status !== "FIXED")
+        item.riskScore += severityWeight(finding2.severity);
+    }
+  }
+  return Array.from(byFile.values()).filter((item) => item.comments + item.findings > 0).sort(
+    (a, b) => b.riskScore - a.riskScore || b.critical - a.critical || a.target.localeCompare(b.target)
+  ).slice(0, 8);
+}
+function buildModuleHotspots(sessions) {
+  const byModule = /* @__PURE__ */ new Map();
+  for (const session of sessions) {
+    for (const comment of session.comments ?? []) {
+      const moduleName = moduleFromFile(comment.file);
+      const item = ensureHotspot(byModule, moduleName, "module");
+      item.comments += 1;
+      if (comment.severity === "CRITICAL") item.critical += 1;
+      if (comment.status !== "RESOLVED" && comment.status !== "APPROVED")
+        item.riskScore += severityWeight(comment.severity);
+    }
+    for (const finding2 of session.findings ?? []) {
+      const moduleName = moduleFromFile(finding2.file);
+      const item = ensureHotspot(byModule, moduleName, "module");
+      item.findings += 1;
+      if (finding2.severity === "CRITICAL") item.critical += 1;
+      if (finding2.status !== "APPROVED" && finding2.status !== "FIXED")
+        item.riskScore += severityWeight(finding2.severity);
+    }
+  }
+  return Array.from(byModule.values()).filter((item) => item.comments + item.findings > 0).sort(
+    (a, b) => b.riskScore - a.riskScore || b.critical - a.critical || a.target.localeCompare(b.target)
+  ).slice(0, 8);
+}
+function buildCorrelations(currentSession, sessions) {
+  const targetSessions = currentSession ? [currentSession] : sessions.slice(-3);
+  const changedFiles = new Set(
+    targetSessions.flatMap((session) => session.changedFiles ?? [])
+  );
+  for (const session of targetSessions) {
+    for (const comment of session.comments ?? [])
+      changedFiles.add(comment.file);
+    for (const finding2 of session.findings ?? [])
+      changedFiles.add(finding2.file);
+  }
+  return Array.from(changedFiles).map((file) => {
+    const comments = targetSessions.flatMap((session) => session.comments ?? []).filter((comment) => comment.file === file);
+    const findings = targetSessions.flatMap((session) => session.findings ?? []).filter((finding2) => finding2.file === file);
+    const openComments = comments.filter(
+      (comment) => comment.status !== "RESOLVED" && comment.status !== "APPROVED"
+    ).length;
+    const criticalSignals = [...comments, ...findings].filter(
+      (item) => item.severity === "CRITICAL" || item.severity === "HIGH"
+    ).length;
+    const interpretation = buildCorrelationText(
+      file,
+      comments.length,
+      findings.length,
+      openComments,
+      criticalSignals
+    );
+    return {
+      target: file,
+      comments: comments.length,
+      findings: findings.length,
+      openComments,
+      criticalSignals,
+      interpretation
+    };
+  }).filter((item) => item.comments + item.findings > 0).sort(
+    (a, b) => b.criticalSignals - a.criticalSignals || b.openComments - a.openComments || a.target.localeCompare(b.target)
+  ).slice(0, 8);
+}
+function buildRiskAnalysis(currentSession, hotspots, moduleHotspots, correlations) {
+  const risks = [];
+  const criticalOpen = currentSession?.comments?.filter(
+    (comment) => comment.severity === "CRITICAL" && comment.status !== "RESOLVED" && comment.status !== "APPROVED"
+  ).length ?? 0;
+  const criticalFindings = currentSession?.findings?.filter(
+    (finding2) => finding2.severity === "CRITICAL" && finding2.status !== "FIXED" && finding2.status !== "APPROVED"
+  ).length ?? 0;
+  if (criticalOpen || criticalFindings) {
+    risks.push(
+      `Risco alto: ${criticalOpen + criticalFindings} sinal(is) cr\xEDtico(s) ainda impactam a sess\xE3o atual.`
+    );
+  }
+  if (hotspots[0]?.riskScore >= 8) {
+    risks.push(
+      `Hotspot de arquivo: ${hotspots[0].target} concentra coment\xE1rios/findings com risco ${hotspots[0].riskScore}.`
+    );
+  }
+  if (moduleHotspots[0]?.riskScore >= 10) {
+    risks.push(
+      `Hotspot de m\xF3dulo: ${moduleHotspots[0].target} merece revis\xE3o preventiva antes do merge.`
+    );
+  }
+  if (correlations.some(
+    (item) => item.openComments > 0 && item.criticalSignals > 0
+  )) {
+    risks.push(
+      "H\xE1 correla\xE7\xE3o entre coment\xE1rios abertos e sinais cr\xEDticos/altos no mesmo arquivo."
+    );
+  }
+  if (!risks.length) {
+    risks.push(
+      "Nenhum risco arquitetural relevante detectado com os dados locais atuais."
+    );
+  }
+  return risks;
+}
+function ensureHotspot(map, target, kind) {
+  const existing = map.get(target);
+  if (existing) return existing;
+  const created = {
+    target,
+    kind,
+    comments: 0,
+    findings: 0,
+    critical: 0,
+    riskScore: 0
+  };
+  map.set(target, created);
+  return created;
+}
+function moduleFromFile(file) {
+  const parts = file.split("/").filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
+  return parts[0] ?? file;
+}
+function severityWeight(severity) {
+  const map = {
+    LOW: 1,
+    MEDIUM: 3,
+    HIGH: 5,
+    CRITICAL: 8
+  };
+  return map[severity] ?? 1;
+}
+function buildCorrelationText(file, comments, findings, openComments, criticalSignals) {
+  if (openComments > 0 && criticalSignals > 0) {
+    return `${file} possui coment\xE1rios abertos e sinais altos/cr\xEDticos; revisar antes de aprovar.`;
+  }
+  if (comments > 0 && findings > 0) {
+    return `${file} tem coment\xE1rios humanos e findings autom\xE1ticos no mesmo ponto de aten\xE7\xE3o.`;
+  }
+  if (comments > 0) {
+    return `${file} concentra discuss\xE3o humana de review.`;
+  }
+  return `${file} concentra findings autom\xE1ticos sem coment\xE1rios vinculados ainda.`;
 }
 
 // src/application/reviewSessionService.ts
@@ -867,6 +1145,12 @@ var ReviewSessionService = class {
   async addComment(id, input) {
     const session = await this.getExistingSession(id);
     const updated = addReviewComment(session, input);
+    await this.saveAndAudit(updated);
+    return updated;
+  }
+  async updateCommentStatus(id, commentId, status) {
+    const session = await this.getExistingSession(id);
+    const updated = updateReviewCommentStatus(session, commentId, status);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -1218,8 +1502,16 @@ var ReviewPanel = class {
         file: message.payload.file,
         line: message.payload.line,
         commit: typeof message.payload.commit === "string" ? message.payload.commit : void 0,
-        threadId: typeof message.payload.threadId === "string" ? message.payload.threadId : void 0
+        threadId: typeof message.payload.threadId === "string" ? message.payload.threadId : void 0,
+        severity: typeof message.payload.severity === "string" && isValidationSeverity(message.payload.severity) ? message.payload.severity : void 0,
+        status: typeof message.payload.status === "string" && isReviewCommentStatus(message.payload.status) ? message.payload.status : void 0
       });
+      await this.refreshReviewDecorations();
+      await this.postState();
+    }
+    if (message.type === "updateReviewCommentStatus" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.status === "string" && isReviewCommentStatus(message.payload.status)) {
+      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status);
+      await this.refreshReviewDecorations();
       await this.postState();
     }
     if (message.type === "editReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.body === "string") {
@@ -1443,7 +1735,64 @@ var ReviewPanel = class {
   }
   async postState() {
     const state = await this.service.getDashboardState();
-    this.post({ type: "dashboardState", payload: state });
+    const vscodeContext = await this.collectVSCodeContext();
+    this.post({ type: "dashboardState", payload: { ...state, vscode: vscodeContext } });
+  }
+  async collectVSCodeContext() {
+    const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
+    const problems = vscode2.languages.getDiagnostics().filter(([uri]) => !workspaceFolder || uri.fsPath.startsWith(workspaceFolder.uri.fsPath)).flatMap(([uri, diagnostics]) => diagnostics.map((diagnostic) => ({
+      file: workspaceFolder ? vscode2.workspace.asRelativePath(uri, false) : uri.fsPath,
+      line: diagnostic.range.start.line + 1,
+      severity: vscode2.DiagnosticSeverity[diagnostic.severity] ?? "Unknown",
+      message: diagnostic.message,
+      source: diagnostic.source
+    }))).slice(0, 200);
+    const commands3 = await vscode2.commands.getCommands(true);
+    const testsAvailable = commands3.includes("testing.runAll") || commands3.some((command) => command.startsWith("testing."));
+    const lastRun = this.context.workspaceState.get("codeReview.lastVSCodeTestRun", { status: "NOT_RUN" });
+    return {
+      problems,
+      tests: {
+        available: testsAvailable,
+        lastRunStatus: lastRun.status,
+        lastRunAt: lastRun.at
+      }
+    };
+  }
+  async runVSCodeTests() {
+    try {
+      await vscode2.commands.executeCommand("testing.runAll");
+      await this.context.workspaceState.update("codeReview.lastVSCodeTestRun", { status: "RUN_REQUESTED", at: (/* @__PURE__ */ new Date()).toISOString() });
+      vscode2.window.showInformationMessage("Execucao de testes solicitada ao VS Code Test Explorer.");
+    } catch {
+      await this.context.workspaceState.update("codeReview.lastVSCodeTestRun", { status: "UNAVAILABLE", at: (/* @__PURE__ */ new Date()).toISOString() });
+      vscode2.window.showWarningMessage("O VS Code Test Explorer nao esta disponivel para este workspace.");
+    }
+  }
+  async refreshReviewDecorations() {
+    const state = await this.service.getDashboardState();
+    const editor = vscode2.window.activeTextEditor;
+    if (!editor || !state.currentSession) return;
+    const activeFile = vscode2.workspace.asRelativePath(editor.document.uri, false);
+    const comments = (state.currentSession.comments ?? []).filter((comment) => comment.file === activeFile);
+    if (!comments.length) return;
+    const decoration = vscode2.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      overviewRulerLane: vscode2.OverviewRulerLane.Right,
+      after: { contentText: "  Code Review", color: new vscode2.ThemeColor("editorCodeLens.foreground") },
+      border: "1px solid",
+      borderColor: new vscode2.ThemeColor("editorWarning.foreground")
+    });
+    editor.setDecorations(decoration, comments.map((comment) => {
+      const line = Math.max(0, comment.line - 1);
+      return {
+        range: new vscode2.Range(line, 0, line, 0),
+        hoverMessage: new vscode2.MarkdownString(`**Code Review** (${comment.severity}/${comment.status})
+
+${comment.body}`)
+      };
+    }));
+    this.context.subscriptions.push(decoration);
   }
   post(message) {
     this.panel?.webview.postMessage(message);

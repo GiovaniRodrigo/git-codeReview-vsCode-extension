@@ -3,6 +3,8 @@ import { ReviewSession, ValidationFinding } from '../domain/reviewSession';
 export interface ReviewMetrics {
   qualityScore: number;
   findingsCount: number;
+  commentsCount: number;
+  openCommentsCount: number;
   criticalCount: number;
   highCount: number;
   reopenedCount: number;
@@ -12,14 +14,17 @@ export interface ReviewMetrics {
   correctionsCount: number;
   eventsCount: number;
   ruleFrequency: Array<{ rule: string; count: number }>;
-  reviewerCount: Array<{ reviewer: string; count: number }>;
-  developerCount: Array<{ developer: string; count: number }>;
+  reviewerCount: Array<{ rule: string; count: number }>;
+  developerCount: Array<{ rule: string; count: number }>;
   timeline: Array<{ date: string; findings: number; corrections: number; approvals: number; reopenings: number }>;
 }
 
 export function calculateReviewMetrics(sessions: ReviewSession[]): ReviewMetrics {
   const findings = sessions.flatMap((session) => session.findings ?? []);
+  const comments = sessions.flatMap((session) => session.comments ?? []);
   const findingsCount = findings.length;
+  const commentsCount = comments.length;
+  const openCommentsCount = comments.filter((comment) => comment.status !== 'RESOLVED' && comment.status !== 'APPROVED').length;
   const criticalCount = findings.filter((finding) => finding.severity === 'CRITICAL').length;
   const highCount = findings.filter((finding) => finding.severity === 'HIGH').length;
   const reopenedCount = findings.filter((finding) => finding.statusHistory.some((entry) => entry.status === 'REOPENED')).length;
@@ -30,8 +35,10 @@ export function calculateReviewMetrics(sessions: ReviewSession[]): ReviewMetrics
   const eventsCount = sessions.reduce((total, session) => total + session.history.length, 0);
 
   return {
-    qualityScore: calculateQualityScore(findings),
+    qualityScore: calculateQualityScore(findings, comments),
     findingsCount,
+    commentsCount,
+    openCommentsCount,
     criticalCount,
     highCount,
     reopenedCount,
@@ -47,8 +54,14 @@ export function calculateReviewMetrics(sessions: ReviewSession[]): ReviewMetrics
   };
 }
 
-function calculateQualityScore(findings: ValidationFinding[]): number {
-  const penalty = findings.reduce((total, finding) => {
+function calculateQualityScore(findings: ValidationFinding[], comments: ReviewSession['comments']): number {
+  const commentPenalty = comments.reduce((total, comment) => {
+    const severityPenalty = comment.severity === 'CRITICAL' ? 20 : comment.severity === 'HIGH' ? 12 : comment.severity === 'MEDIUM' ? 7 : 3;
+    const statusRelief = comment.status === 'APPROVED' ? 0.15 : comment.status === 'RESOLVED' ? 0.35 : 1;
+    return total + severityPenalty * statusRelief;
+  }, 0);
+
+  const penalty = commentPenalty + findings.reduce((total, finding) => {
     const severityPenalty = finding.severity === 'CRITICAL' ? 22 : finding.severity === 'HIGH' ? 14 : finding.severity === 'MEDIUM' ? 7 : 3;
     const statusRelief = finding.status === 'APPROVED' ? 0.2 : finding.status === 'FIXED' ? 0.5 : 1;
     const reopenPenalty = finding.statusHistory.filter((entry) => entry.status === 'REOPENED').length * 5;

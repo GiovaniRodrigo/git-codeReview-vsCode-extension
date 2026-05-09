@@ -1738,3 +1738,408 @@ button.primary.full {
 .sessions-panel {
   min-width: 0;
 }
+
+.comment-meta-row,
+.vscode-context-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-meta-row {
+  grid-template-columns: repeat(3, minmax(0, max-content));
+  margin: 8px 0;
+}
+
+.vscode-context-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 12px 0;
+}
+
+.vscode-context-grid article {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.vscode-context-grid strong,
+.vscode-context-grid span,
+.vscode-context-grid small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problems-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.problems-list button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  text-align: left;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.problems-list span,
+.problems-list strong,
+.problems-list small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.problems-list small {
+  display: block;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.git-comment-panel select,
+.comment-form select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  padding: 8px 10px;
+}
+
+/* Menu responsibility alignment */
+.dashboard-only .review-workspace.dashboard-focus {
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+}
+
+.diagnostics-only .review-workspace {
+  align-items: start;
+}
+
+.diagnostics-only .workspace-side .sessions-panel,
+.diagnostics-only .workspace-side .comments-panel {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.actions.vertical {
+  display: grid;
+  gap: 10px;
+}
+
+.conformity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.conformity-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--surface-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.conformity-item strong,
+.conformity-item p,
+.conformity-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conformity-item p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+}
+
+.conformities-only .sessions-panel,
+.dashboard-only .sessions-panel,
+.diagnostics-only .sessions-panel {
+  overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .dashboard-only .review-workspace.dashboard-focus,
+  .diagnostics-only .review-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Intelligence menu alignment */
+.intelligence-page {
+  overflow: auto;
+}
+
+.intelligence-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+.intelligence-main,
+.intelligence-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.intelligence-side .sessions-panel {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.risk-list,
+.hotspot-list,
+.correlation-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.risk-list article,
+.hotspot-list article,
+.correlation-list article {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--surface-1);
+}
+
+.risk-list article {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.risk-list p,
+.hotspot-list strong,
+.hotspot-list span,
+.correlation-list strong,
+.correlation-list p,
+.correlation-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hotspot-head,
+.correlation-list header,
+.correlation-metrics,
+.hotspot-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.hotspot-head strong,
+.correlation-list header strong {
+  white-space: nowrap;
+}
+
+.hotspot-meter {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.08);
+  margin: 10px 0;
+}
+
+.hotspot-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0.8), rgba(251, 191, 36, 0.9), rgba(255, 92, 102, 0.95));
+}
+
+.hotspot-meta,
+.correlation-metrics {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hotspot-panel.compact .hotspot-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.correlation-list p {
+  color: var(--text-muted);
+  margin: 8px 0;
+}
+
+@media (max-width: 980px) {
+  .intelligence-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Comments menu alignment: filters, grouping, score impact and safe content bounds */
+.comments-only .comments-workspace {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.comment-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.enhanced-comment-form {
+  grid-template-columns: minmax(180px, 1.6fr) 72px 116px 150px minmax(220px, 2fr) auto;
+  align-items: center;
+}
+
+.comments-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(130px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.comments-toolbar input,
+.comments-toolbar select,
+.enhanced-comment-form select,
+.enhanced-comment-form input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  padding: 9px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grouped-comments {
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.comment-file-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.comment-file-group > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.comment-file-group > header strong,
+.comment-file-group > header span,
+.comment-item header span,
+.comment-item p,
+.comment-thread p,
+.thread-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.comment-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.comment-header-actions button {
+  min-height: 28px;
+  padding: 5px 8px;
+}
+
+.comment-item {
+  min-width: 0;
+  overflow: hidden;
+  border-left: 4px solid var(--border-soft);
+}
+
+.comment-item.severity-critical { border-left-color: var(--md-sys-color-error); }
+.comment-item.severity-high { border-left-color: #ff8a65; }
+.comment-item.severity-medium { border-left-color: var(--md-sys-color-tertiary); }
+.comment-item.severity-low { border-left-color: var(--md-sys-color-primary); }
+
+.comment-meta-row {
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  align-items: center;
+  overflow: auto;
+}
+
+.comment-thread {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-1);
+  min-width: 0;
+}
+
+.thread-line {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.thread-line span {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.thread-line p {
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .comment-impact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .enhanced-comment-form,
+  .comments-toolbar { grid-template-columns: 1fr; }
+}

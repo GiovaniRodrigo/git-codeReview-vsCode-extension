@@ -11,9 +11,11 @@ export type ReviewSessionStatus = (typeof REVIEW_SESSION_STATUSES)[number];
 
 export const VALIDATION_FINDING_STATUSES = ['NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'] as const;
 export const VALIDATION_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+export const REVIEW_COMMENT_STATUSES = ['OPEN', 'NEEDS_CHANGES', 'RESOLVED', 'APPROVED'] as const;
 
 export type ValidationFindingStatus = (typeof VALIDATION_FINDING_STATUSES)[number];
 export type ValidationSeverity = (typeof VALIDATION_SEVERITIES)[number];
+export type ReviewCommentStatus = (typeof REVIEW_COMMENT_STATUSES)[number];
 
 export interface ReviewHistoryEntry {
   id: string;
@@ -24,6 +26,7 @@ export interface ReviewHistoryEntry {
     | 'NAVIGATION_CHANGED'
     | 'COMMENT_ADDED'
     | 'COMMENT_EDITED'
+    | 'COMMENT_STATUS_CHANGED'
     | 'FINDING_CREATED'
     | 'FINDING_STATUS_CHANGED'
     | 'CORRECTION_REGISTERED'
@@ -58,6 +61,9 @@ export interface ReviewComment {
   file: string;
   line: number;
   commit?: string;
+  severity: ValidationSeverity;
+  status: ReviewCommentStatus;
+  isPublic: boolean;
   createdAt: string;
   updatedAt: string;
   history: ReviewCommentVersion[];
@@ -171,6 +177,10 @@ export interface CreateReviewSessionInput {
 
 export function isReviewSessionStatus(value: string): value is ReviewSessionStatus {
   return REVIEW_SESSION_STATUSES.includes(value as ReviewSessionStatus);
+}
+
+export function isReviewCommentStatus(value: string): value is ReviewCommentStatus {
+  return REVIEW_COMMENT_STATUSES.includes(value as ReviewCommentStatus);
 }
 
 export function createReviewSession(input: CreateReviewSessionInput): ReviewSession {
@@ -462,6 +472,8 @@ export interface AddReviewCommentInput {
   line: number;
   commit?: string;
   threadId?: string;
+  severity?: ValidationSeverity;
+  status?: ReviewCommentStatus;
   now?: Date;
   id?: string;
 }
@@ -495,12 +507,15 @@ export function addReviewComment(session: ReviewSession, input: AddReviewComment
     file: input.file,
     line: input.line,
     commit: input.commit,
+    severity: input.severity ?? 'MEDIUM',
+    status: input.status ?? 'NEEDS_CHANGES',
+    isPublic: true,
     createdAt: updatedAt,
     updatedAt,
     history: []
   };
 
-  return {
+  return recalculateReviewSessionByComments({
     ...session,
     comments: [...comments, comment],
     updatedAt,
@@ -513,7 +528,38 @@ export function addReviewComment(session: ReviewSession, input: AddReviewComment
         createdAt: updatedAt
       }
     ]
-  };
+  });
+}
+
+export function updateReviewCommentStatus(
+  session: ReviewSession,
+  commentId: string,
+  status: ReviewCommentStatus,
+  now = new Date()
+): ReviewSession {
+  const comments = session.comments ?? [];
+  const existing = comments.find((item) => item.id === commentId);
+
+  if (!existing) {
+    throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+
+  const updatedAt = now.toISOString();
+
+  return recalculateReviewSessionByComments({
+    ...session,
+    comments: comments.map((item) => item.id === commentId ? { ...item, status, updatedAt } : item),
+    updatedAt,
+    history: [
+      ...session.history,
+      {
+        id: `${session.id}-comment-status-${session.history.length + 1}`,
+        type: 'COMMENT_STATUS_CHANGED',
+        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status}`,
+        createdAt: updatedAt
+      }
+    ]
+  });
 }
 
 export function editReviewComment(
@@ -635,6 +681,27 @@ function appendHistory(
       createdAt
     }
   ];
+}
+
+
+export function recalculateReviewSessionByComments(session: ReviewSession): ReviewSession {
+  const comments = session.comments ?? [];
+  const openComments = comments.filter((comment) => comment.status !== 'RESOLVED' && comment.status !== 'APPROVED');
+  const hasCritical = openComments.some((comment) => comment.severity === 'CRITICAL');
+  const hasBlocking = openComments.some((comment) => comment.severity === 'HIGH' || comment.status === 'NEEDS_CHANGES');
+
+  const nextStatus: ReviewSessionStatus = openComments.length === 0
+    ? 'APPROVED'
+    : hasCritical
+      ? 'REOPENED'
+      : hasBlocking
+        ? 'NEEDS_CHANGES'
+        : 'IN_REVIEW';
+
+  return {
+    ...session,
+    status: nextStatus
+  };
 }
 
 export function updateReviewSessionGitContext(
