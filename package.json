@@ -1,14 +1,30 @@
 {
   "name": "code-review-vscode-extension",
   "displayName": "Code Review Design Extension",
-  "description": "Extensão VS Code com Webview fiel ao design de code review, PR review e analytics.",
+  "description": "Professional VS Code extension for architectural code review, PR analysis, and engineering telemetry with Material Design 3.",
   "version": "1.0.0",
-  "publisher": "local-dev",
-  "private": true,
+  "publisher": "giovani",
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GiovaniRodrigo/code-review-extension"
+  },
+  "icon": "media/logo_128px.png",
+  "keywords": [
+    "code-review",
+    "architecture",
+    "clean-architecture",
+    "solid",
+    "telemetry",
+    "git"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "Programming Languages",
+    "Linters",
     "Other"
   ],
   "activationEvents": [
@@ -114,23 +130,24 @@
     }
   },
   "scripts": {
-    "compile": "npm run install:webview && npm run build:webview && npm run build:extension",
+    "compile": "npm run build:webview && npm run build:extension",
     "build": "npm run compile",
     "build:extension": "node esbuild.mjs",
-    "build:webview": "npm --prefix webview-ui run build",
+    "build:webview": "npm ci --prefix webview-ui && npm --prefix webview-ui run build",
+    "ci:install": "npm ci && npm ci --prefix webview-ui",
+    "validate:production": "npm run ci:install && npm test && npm run build:extension && npm run build:webview && npm audit --omit=dev && npm --prefix webview-ui audit --omit=dev && npm run package",
     "watch": "npm run watch:extension",
     "watch:extension": "node esbuild.mjs --watch",
     "watch:webview": "npm --prefix webview-ui run build -- --watch",
     "test": "node --test test/*.test.mjs",
-    "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
-    "install:webview": "npm --prefix webview-ui install",
+    "package": "npm run compile && npx @vscode/vsce package --no-dependencies --allow-missing-repository",
     "clean": "rm -rf dist webview-ui/dist node_modules webview-ui/node_modules"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
     "@types/vscode": "^1.90.0",
-    "@vscode/vsce": "^2.15.0",
-    "esbuild": "^0.21.5",
+    "@vscode/vsce": "^3.9.1",
+    "esbuild": "^0.28.0",
     "typescript": "^5.4.5"
   }
 }

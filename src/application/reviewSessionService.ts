@@ -28,8 +28,8 @@ import {
   updateMergeDecision
 } from '../domain/reviewSession';
 import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
-import { LocalTtlCache } from '../infrastructure/performanceCache';
-import { listIntegrationDescriptors, IntegrationDescriptor } from '../infrastructure/integrationAdapters';
+import { LocalTtlCache } from './performanceCache';
+import { listIntegrationDescriptors, IntegrationDescriptor } from './integrationDescriptors';
 import { AssistedIntelligenceReport, buildAssistedIntelligenceReport } from './assistedIntelligence';
 
 export interface ReviewSessionRepository {
@@ -37,6 +37,7 @@ export interface ReviewSessionRepository {
   getById(id: string): Promise<ReviewSession | undefined>;
   saveCurrent(session: ReviewSession): Promise<void>;
   list(): Promise<ReviewSession[]>;
+  delete?(id: string): Promise<void>;
   exportDatabase?(): Promise<string>;
   createBackup?(): Promise<string>;
   syncToRemote?(targetPath?: string): Promise<string>;
@@ -70,6 +71,12 @@ export interface DashboardState {
   intelligence: AssistedIntelligenceReport;
   performance: PerformanceState;
   integrations: IntegrationDescriptor[];
+  vscode?: VSCodeContextState;
+}
+
+export interface VSCodeContextState {
+  problems: Array<{ file: string; line: number; severity: string; message: string; source?: string }>;
+  tests: { available: boolean; lastRunStatus: string; lastRunAt?: string; failed?: number };
 }
 
 export class ReviewSessionService {
@@ -131,6 +138,21 @@ export class ReviewSessionService {
 
     await this.saveAndAudit(session);
     return session;
+  }
+
+  async deleteReview(id: string): Promise<void> {
+    const session = await this.repository.getById(id);
+
+    if (!session) {
+      throw new Error(`Review session nao encontrada: ${id}`);
+    }
+
+    if (!this.repository.delete) {
+      throw new Error('Repositorio atual nao oferece remocao permanente de review session.');
+    }
+
+    await this.repository.delete(id);
+    this.dashboardCache.clear();
   }
 
   async updateStatus(id: string, status: ReviewSessionStatus): Promise<ReviewSession> {

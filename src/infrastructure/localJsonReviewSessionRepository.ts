@@ -51,6 +51,17 @@ export class LocalJsonReviewSessionRepository implements ReviewSessionRepository
     });
   }
 
+  async delete(id: string): Promise<void> {
+    const database = await this.readDatabase();
+    const sessions = database.sessions.filter((session) => session.id !== id);
+    await this.writeDatabase({
+      version: 1,
+      currentSessionId: database.currentSessionId === id ? sessions[0]?.id : database.currentSessionId,
+      sessions,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
   async exportDatabase(): Promise<string> {
     const database = await this.readDatabase();
     return JSON.stringify(database, null, 2);

@@ -691,7 +691,7 @@ function round(value) {
   return Math.round(value * 10) / 10;
 }
 
-// src/infrastructure/performanceCache.ts
+// src/application/performanceCache.ts
 var LocalTtlCache = class {
   constructor(ttlMs = 3e3) {
     this.ttlMs = ttlMs;
@@ -714,7 +714,7 @@ var LocalTtlCache = class {
   }
 };
 
-// src/infrastructure/integrationAdapters.ts
+// src/application/integrationDescriptors.ts
 function listIntegrationDescriptors() {
   return [
     { id: "github", name: "GitHub", enabled: false, status: "READY_FOR_CONFIGURATION", description: "Preparado para mapear PRs, commits e checks." },
@@ -1127,6 +1127,17 @@ var ReviewSessionService = class {
     await this.saveAndAudit(session);
     return session;
   }
+  async deleteReview(id) {
+    const session = await this.repository.getById(id);
+    if (!session) {
+      throw new Error(`Review session nao encontrada: ${id}`);
+    }
+    if (!this.repository.delete) {
+      throw new Error("Repositorio atual nao oferece remocao permanente de review session.");
+    }
+    await this.repository.delete(id);
+    this.dashboardCache.clear();
+  }
   async updateStatus(id, status) {
     const session = await this.repository.getById(id);
     if (!session) {
@@ -1345,6 +1356,16 @@ var LocalJsonReviewSessionRepository = class {
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
   }
+  async delete(id) {
+    const database = await this.readDatabase();
+    const sessions = database.sessions.filter((session) => session.id !== id);
+    await this.writeDatabase({
+      version: 1,
+      currentSessionId: database.currentSessionId === id ? sessions[0]?.id : database.currentSessionId,
+      sessions,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
   async exportDatabase() {
     const database = await this.readDatabase();
     return JSON.stringify(database, null, 2);
@@ -1480,6 +1501,10 @@ var ReviewPanel = class {
     }
     if (message.type === "openReview" && typeof message.payload?.id === "string") {
       await this.service.openReview(message.payload.id);
+      await this.postState();
+    }
+    if (message.type === "deleteReviewSession" && typeof message.payload?.id === "string") {
+      await this.confirmAndDeleteReview(message.payload.id);
       await this.postState();
     }
     if (message.type === "updateReviewStatus" && typeof message.payload?.id === "string" && typeof message.payload?.status === "string" && isReviewSessionStatus(message.payload.status)) {
@@ -1622,6 +1647,26 @@ var ReviewPanel = class {
       const syncedPath = await this.service.syncRemote();
       this.post({ type: "operationCompleted", payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
     }
+    if (message.type === "runVSCodeTests") {
+      await this.runVSCodeTests();
+      await this.postState();
+    }
+  }
+  async confirmAndDeleteReview(id) {
+    const first = await vscode2.window.showWarningMessage(
+      `Remover permanentemente a review session ${id}?`,
+      { modal: true },
+      "Remover"
+    );
+    if (first !== "Remover") return;
+    const second = await vscode2.window.showWarningMessage(
+      "Esta acao apaga a sessao do banco local. Confirme novamente para continuar.",
+      { modal: true },
+      "Confirmar remocao permanente"
+    );
+    if (second !== "Confirmar remocao permanente") return;
+    await this.service.deleteReview(id);
+    this.post({ type: "operationCompleted", payload: { message: `Review session removida: ${id}` } });
   }
   async loadCommitFiles(commit = "HEAD") {
     const workspaceFolder = vscode2.workspace.workspaceFolders?.[0];
@@ -1654,11 +1699,14 @@ var ReviewPanel = class {
     }
     const cwd = workspaceFolder.uri.fsPath;
     const normalized = file.replace(/^\/+/, "");
-    const [content, diff] = await Promise.all([
-      this.readGitFile(cwd, normalized, commit),
-      this.readGitDiff(cwd, normalized, commit)
+    const normalizedCommit = commit?.trim() || "HEAD";
+    const beforeRef = normalizedCommit === "HEAD" ? "HEAD" : `${normalizedCommit}^`;
+    const [beforeContent, afterContent, diff] = await Promise.all([
+      this.readGitFile(cwd, normalized, beforeRef),
+      this.readGitFile(cwd, normalized, normalizedCommit),
+      this.readGitDiff(cwd, normalized, normalizedCommit)
     ]);
-    return { file: normalized, commit, content, diff };
+    return { file: normalized, commit: normalizedCommit, beforeContent, afterContent, diff };
   }
   async readGitFile(cwd, file, commit) {
     const normalizedCommit = commit?.trim() || "HEAD";
@@ -1672,12 +1720,7 @@ var ReviewPanel = class {
       const bytes = await vscode2.workspace.fs.readFile(uri);
       return Buffer.from(bytes).toString("utf8");
     } catch {
-      return [
-        `// Arquivo nao encontrado no workspace atual: ${file}`,
-        `// Commit/base solicitado: ${normalizedCommit}`,
-        "// Isso pode acontecer quando o arquivo foi removido, renomeado, pertence a outro branch ou existe apenas no diff.",
-        "// Use o painel de Diff para revisar a alteracao sem depender do arquivo fisico."
-      ].join("\n");
+      return "";
     }
   }
   async readGitDiff(cwd, file, commit = "HEAD") {
@@ -1691,7 +1734,11 @@ var ReviewPanel = class {
     for (const args of diffCommands) {
       try {
         const { stdout } = await execFileAsync2("git", args, { cwd, maxBuffer: 1024 * 1024 * 12 });
-        if (stdout.trim()) return stdout;
+        if (stdout.trim()) {
+          const lines2 = stdout.split(/\r?\n/);
+          const hunkIndex = lines2.findIndex((line) => line.startsWith("@@"));
+          return hunkIndex !== -1 ? lines2.slice(hunkIndex).join("\n") : stdout;
+        }
       } catch {
       }
     }
@@ -1855,7 +1902,7 @@ function getWebviewHtml(webview, extensionUri, initialView = "dashboard") {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};" />
   <link rel="stylesheet" href="${styleUri}" />
   <title>Code Review</title>
 </head>
@@ -1992,7 +2039,6 @@ function activate(context) {
       vscode3.window.showInformationMessage(`Sincronizacao de Code Review concluida em: ${syncedPath}`);
     })
   );
-  reviewPanel.open("dashboard");
 }
 async function openJsonDocument(content) {
   const document = await vscode3.workspace.openTextDocument({

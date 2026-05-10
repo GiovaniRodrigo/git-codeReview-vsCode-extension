@@ -76,6 +76,11 @@ export class ReviewPanel {
       await this.postState();
     }
 
+    if (message.type === 'deleteReviewSession' && typeof message.payload?.id === 'string') {
+      await this.confirmAndDeleteReview(message.payload.id);
+      await this.postState();
+    }
+
     if (
       message.type === 'updateReviewStatus'
       && typeof message.payload?.id === 'string'
@@ -309,6 +314,32 @@ export class ReviewPanel {
       const syncedPath = await this.service.syncRemote();
       this.post({ type: 'operationCompleted', payload: { message: `Sincronizacao concluida em: ${syncedPath}` } });
     }
+
+    if (message.type === 'runVSCodeTests') {
+      await this.runVSCodeTests();
+      await this.postState();
+    }
+  }
+
+  private async confirmAndDeleteReview(id: string): Promise<void> {
+    const first = await vscode.window.showWarningMessage(
+      `Remover permanentemente a review session ${id}?`,
+      { modal: true },
+      'Remover'
+    );
+
+    if (first !== 'Remover') return;
+
+    const second = await vscode.window.showWarningMessage(
+      'Esta acao apaga a sessao do banco local. Confirme novamente para continuar.',
+      { modal: true },
+      'Confirmar remocao permanente'
+    );
+
+    if (second !== 'Confirmar remocao permanente') return;
+
+    await this.service.deleteReview(id);
+    this.post({ type: 'operationCompleted', payload: { message: `Review session removida: ${id}` } });
   }
 
 
@@ -346,7 +377,7 @@ export class ReviewPanel {
     return { commit: normalizedCommit, files: [] };
   }
 
-  private async loadGitFile(file: string, commit = 'HEAD'): Promise<{ file: string; commit: string; content: string; diff: string }> {
+  private async loadGitFile(file: string, commit = 'HEAD'): Promise<{ file: string; commit: string; beforeContent: string; afterContent: string; diff: string }> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error('Abra um workspace para carregar arquivos do Git.');
@@ -354,13 +385,16 @@ export class ReviewPanel {
 
     const cwd = workspaceFolder.uri.fsPath;
     const normalized = file.replace(/^\/+/, '');
+    const normalizedCommit = commit?.trim() || 'HEAD';
+    const beforeRef = normalizedCommit === 'HEAD' ? 'HEAD' : `${normalizedCommit}^`;
 
-    const [content, diff] = await Promise.all([
-      this.readGitFile(cwd, normalized, commit),
-      this.readGitDiff(cwd, normalized, commit)
+    const [beforeContent, afterContent, diff] = await Promise.all([
+      this.readGitFile(cwd, normalized, beforeRef),
+      this.readGitFile(cwd, normalized, normalizedCommit),
+      this.readGitDiff(cwd, normalized, normalizedCommit)
     ]);
 
-    return { file: normalized, commit, content, diff };
+    return { file: normalized, commit: normalizedCommit, beforeContent, afterContent, diff };
   }
 
   private async readGitFile(cwd: string, file: string, commit: string): Promise<string> {
@@ -370,21 +404,16 @@ export class ReviewPanel {
       const { stdout } = await execFileAsync('git', ['show', `${normalizedCommit}:${file}`], { cwd, maxBuffer: 1024 * 1024 * 8 });
       return stdout;
     } catch {
-      // Arquivos novos, removidos ou fora do commit podem nao existir em commit:path.
-      // Nesse caso tentamos o workspace atual e, se falhar, devolvemos uma mensagem segura para o webview.
+      // Arquivo pode ser novo ou nao existir na ref solicitada.
     }
 
     try {
+      // Fallback para o workspace se a ref for HEAD ou falhar.
       const uri = vscode.Uri.joinPath(vscode.Uri.file(cwd), file);
       const bytes = await vscode.workspace.fs.readFile(uri);
       return Buffer.from(bytes).toString('utf8');
     } catch {
-      return [
-        `// Arquivo nao encontrado no workspace atual: ${file}`,
-        `// Commit/base solicitado: ${normalizedCommit}`,
-        '// Isso pode acontecer quando o arquivo foi removido, renomeado, pertence a outro branch ou existe apenas no diff.',
-        '// Use o painel de Diff para revisar a alteracao sem depender do arquivo fisico.'
-      ].join('\n');
+      return '';
     }
   }
 
@@ -400,7 +429,12 @@ export class ReviewPanel {
     for (const args of diffCommands) {
       try {
         const { stdout } = await execFileAsync('git', args, { cwd, maxBuffer: 1024 * 1024 * 12 });
-        if (stdout.trim()) return stdout;
+        if (stdout.trim()) {
+          // Remove cabecalhos do diff ate o primeiro @@
+          const lines = stdout.split(/\r?\n/);
+          const hunkIndex = lines.findIndex(line => line.startsWith('@@'));
+          return hunkIndex !== -1 ? lines.slice(hunkIndex).join('\n') : stdout;
+        }
       } catch {
         // Tenta a proxima estrategia.
       }
@@ -590,7 +624,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri, initi
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};" />
   <link rel="stylesheet" href="${styleUri}" />
   <title>Code Review</title>
 </head>

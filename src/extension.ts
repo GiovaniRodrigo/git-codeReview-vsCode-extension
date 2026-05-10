@@ -38,8 +38,6 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.showInformationMessage(`Sincronizacao de Code Review concluida em: ${syncedPath}`);
     })
   );
-
-  reviewPanel.open('dashboard');
 }
 
 async function openJsonDocument(content: string): Promise<void> {

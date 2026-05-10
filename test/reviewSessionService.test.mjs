@@ -41,6 +41,18 @@ test('rejects opening a review session that does not exist', async () => {
   await assert.rejects(() => service.openReview('missing-review'), /nao encontrada/);
 });
 
+test('deletes an existing review session from the repository', async () => {
+  const repository = new MemoryReviewSessionRepository();
+  const service = new ReviewSessionService(repository, new StaticGitService(git));
+  const session = await service.startReview('Developer', 'Reviewer');
+
+  await service.deleteReview(session.id);
+  const state = await service.getDashboardState();
+
+  assert.equal(state.currentSession, undefined);
+  assert.equal(state.sessions.length, 0);
+});
+
 test('updates review status and appends audit history', async () => {
   const service = new ReviewSessionService(new MemoryReviewSessionRepository(), new StaticGitService(git));
   const session = await service.startReview('Developer', 'Reviewer');
@@ -182,6 +194,11 @@ class MemoryReviewSessionRepository {
   async saveCurrent(session) {
     this.current = session;
     this.sessions = [session, ...this.sessions.filter((item) => item.id !== session.id)];
+  }
+
+  async delete(id) {
+    this.sessions = this.sessions.filter((session) => session.id !== id);
+    if (this.current?.id === id) this.current = this.sessions[0];
   }
 }
 

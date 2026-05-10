@@ -45,10 +45,10 @@ Construir a base estrutural da extensão.
 ### Integração Git
 
 * [x] Leitura de branch atual
-* [ ] Identificação de PR
-* [~] Comparação de diffs
-* [~] Navegação por commits
-* [~] Navegação por arquivos alterados
+* [x] Identificação de PR
+* [x] Comparação de diffs
+* [x] Navegação por commits
+* [x] Navegação por arquivos alterados
 
 ---
 

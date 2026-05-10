@@ -17,14 +17,17 @@ Adicionar uma experiência de entrada para novos usuários da extensão, explica
 
 ## Passos do tour atual
 
-1. Botão para abrir tutorial guiado.
-2. Menu principal lateral.
-3. Botão para iniciar revisão.
-4. Cards de resumo de qualidade.
-5. Tabela de achados da revisão.
-6. Painel de comentários.
-7. Painel de validações.
-8. Ações de persistência, backup e sincronização.
+1. **Tutorial guiado**: Botão para reabrir o onboarding.
+2. **Navegação principal**: Explicação do menu lateral.
+3. **Iniciar revisão (Reviewer)**: Abertura da sessão de análise.
+4. **Análise Git (Reviewer)**: Navegação por commits e arquivos no Git Review.
+5. **Visão Lado a Lado**: Comparação entre Base e Atual no viewer.
+6. **Comentário Inline**: Registro de observações técnicas vinculadas ao código.
+7. **Diagnósticos (Dev)**: Visualização técnica de Problems e Findings.
+8. **Validações e Correções**: Registro formal de não conformidades e tentativas de correção.
+9. **Colaboração (Time)**: Threads, menções e bloqueios de merge.
+10. **Status e Score**: Visão executiva final no Dashboard.
+11. **Persistência e backup**: Ações de exportação e segurança em Configurações.
 
 ## Como criar novos tutoriais
 
