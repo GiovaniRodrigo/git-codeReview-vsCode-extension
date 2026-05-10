@@ -92,7 +92,7 @@ function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
 
       <nav className="nav-list">
         {nav.map(([key, Icon, label, badge]) => (
-          <button key={key} data-tour={key === 'dashboard' ? 'nav-dashboard' : undefined} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
+          <button key={key} data-tour={`nav-${key}`} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
             <Icon size={18} />
             <span>{label}</span>
             {badge && <b>{badge}</b>}
@@ -327,7 +327,7 @@ function GitReviewCenter({ state }) {
   const files = commitFiles.length ? commitFiles : baseFiles;
   const [selectedFile, setSelectedFile] = useState(files[0] ?? '');
   const [selectedCommit, setSelectedCommit] = useState(commits[0]?.split(' ')[0] ?? 'HEAD');
-  const [viewer, setViewer] = useState({ file: selectedFile, commit: selectedCommit, content: '', diff: '', loading: false });
+  const [viewer, setViewer] = useState({ file: selectedFile, commit: selectedCommit, beforeContent: '', afterContent: '', diff: '', loading: false });
   const [commentLine, setCommentLine] = useState(1);
   const [commentBody, setCommentBody] = useState('Solicitar ajuste neste trecho.');
   const [commentSeverity, setCommentSeverity] = useState('MEDIUM');
@@ -335,7 +335,7 @@ function GitReviewCenter({ state }) {
 
   const requestFile = (file = selectedFile, commit = selectedCommit) => {
     if (!file) {
-      setViewer({ file: '', commit, content: '// Nenhum arquivo alterado encontrado para este contexto Git.', diff: 'Sem diff disponível.', loading: false });
+      setViewer({ file: '', commit, beforeContent: '', afterContent: '// Nenhum arquivo alterado encontrado para este contexto Git.', diff: 'Sem diff disponível.', loading: false });
       return;
     }
 
@@ -376,7 +376,8 @@ function GitReviewCenter({ state }) {
           setViewer({
             file: '',
             commit: payload.commit || selectedCommit,
-            content: '// Nenhum arquivo encontrado nesse commit. Verifique se o hash pertence ao repositório aberto.',
+            beforeContent: '',
+            afterContent: '// Nenhum arquivo encontrado nesse commit. Verifique se o hash pertence ao repositório aberto.',
             diff: 'Sem diff disponível para este commit.',
             loading: false
           });
@@ -404,8 +405,9 @@ function GitReviewCenter({ state }) {
     setCommentBody('');
   };
 
-  const visibleLines = (viewer.content || '// Selecione um arquivo alterado para visualizar o conteúdo.').split('\n').slice(0, 220);
-  const visibleDiff = (viewer.diff || 'Sem diff disponível para este arquivo no contexto atual.').split('\n').slice(0, 220);
+  const beforeLines = (viewer.beforeContent || '').split('\n').slice(0, 300);
+  const afterLines = (viewer.afterContent || '// Selecione um arquivo alterado para visualizar o conteúdo.').split('\n').slice(0, 300);
+  const diffLines = (viewer.diff || 'Sem diff disponível para este arquivo no contexto atual.').split('\n').slice(0, 300);
 
   return (
     <main className="center-panel simple git-review-center">
@@ -464,7 +466,7 @@ function GitReviewCenter({ state }) {
           </div>
         </aside>
 
-        <section className="git-file-viewer">
+        <section className="git-file-viewer" data-tour="git-file-viewer">
           <div className="file-viewer-toolbar">
             <div>
               <span className="eyebrow">Arquivo selecionado</span>
@@ -479,21 +481,30 @@ function GitReviewCenter({ state }) {
 
           <div className="split-code-review">
             <div className="code-pane">
-              <h3>Conteúdo do arquivo {viewer.loading ? '· carregando...' : ''}</h3>
-              <pre aria-busy={viewer.loading}>{visibleLines.map((line, index) => (
+              <h3>Antes (Base) {viewer.loading ? '· carregando...' : ''}</h3>
+              <pre aria-busy={viewer.loading}>{beforeLines.map((line, index) => (
+                <div key={`${index}-${line}`} className="code-line">
+                  <span>{index + 1}</span><code>{line || ' '}</code>
+                </div>
+              ))}</pre>
+            </div>
+            <div className="code-pane">
+              <h3>Depois (Atual) {viewer.loading ? '· carregando...' : ''}</h3>
+              <pre aria-busy={viewer.loading}>{afterLines.map((line, index) => (
                 <button key={`${index}-${line}`} className={Number(commentLine) === index + 1 ? 'code-line active' : 'code-line'} onClick={() => setCommentLine(index + 1)}>
                   <span>{index + 1}</span><code>{line || ' '}</code>
                 </button>
               ))}</pre>
             </div>
-            <div className="code-pane diff-pane">
-              <h3>Diff do Git {viewer.loading ? '· carregando...' : ''}</h3>
-              <pre>{visibleDiff.map((line, index) => <code key={`${index}-${line}`} className={line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : ''}>{line || ' '}</code>)}</pre>
-            </div>
+          </div>
+
+          <div className="code-pane diff-pane" style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', maxHeight: '240px', overflow: 'auto' }}>
+            <h3 style={{ padding: '8px 12px', margin: 0, fontSize: '12px', textTransform: 'uppercase', color: 'var(--md-sys-color-on-surface-variant)' }}>Resumo do Diff (Hunks)</h3>
+            <pre style={{ padding: '8px 0' }}>{diffLines.map((line, index) => <code key={`${index}-${line}`} style={{ display: 'block', padding: '0 12px', fontSize: '12px' }} className={line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : ''}>{line || ' '}</code>)}</pre>
           </div>
         </section>
 
-        <aside className="git-comment-panel">
+        <aside className="git-comment-panel" data-tour="git-comment-panel">
           <h2>Comentário inline</h2>
           <p className="muted">O comentário fica vinculado ao arquivo, linha e commit selecionados.</p>
           <label>Arquivo<input value={selectedFile} readOnly /></label>
@@ -767,7 +778,7 @@ function ValidationFindingsPanel({ session, git }) {
   };
 
   return (
-    <section className="sessions-panel">
+    <section className="sessions-panel" data-tour="validation-panel">
       <div className="section-title">
         <div>
           <h2>Validações</h2>
@@ -1676,6 +1687,7 @@ function SettingsCenter({ state }) {
         <div className="header-actions" data-tour="persistence-actions">
           <button data-tour="export-database" onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> Banco local</button>
           <button onClick={() => vscodeApi?.postMessage({ type: 'createBackup' })}><Shield size={16} /> Backup</button>
+          <button disabled={!state?.currentSession} onClick={() => vscodeApi?.postMessage({ type: 'deleteReviewSession', payload: { id: state.currentSession.id } })}><XCircle size={16} /> Remover sessão</button>
           <button className="primary" onClick={() => vscodeApi?.postMessage({ type: 'syncRemote' })}><RefreshCw size={16} /> Sync remoto</button>
         </div>
       </header>
@@ -1771,38 +1783,60 @@ const defaultTourSteps = [
   },
   {
     target: 'start-review',
-    title: 'Iniciar revisão',
-    body: 'Aqui começa a análise da branch ou PR. A extensão cria uma sessão e registra o contexto para auditoria.',
+    title: 'Iniciar revisão (Reviewer)',
+    body: 'O Reviewer inicia a sessão para analisar a branch ou PR. A extensão registra o autor e cria um histórico auditável.',
     placement: 'bottom'
   },
   {
-    target: 'quality-summary',
-    title: 'Resumo de qualidade',
-    body: 'Os cards mostram score, violações, correções e reincidência para orientar a tomada de decisão.',
-    placement: 'bottom'
+    target: 'nav-git-review',
+    title: 'Análise Git (Reviewer)',
+    body: 'Nesta tela, o Reviewer navega pelos commits e arquivos alterados, visualizando o diff real lado a lado.',
+    placement: 'right',
+    beforeShow: 'git-review'
   },
   {
-    target: 'findings-table',
-    title: 'Achados da revisão',
-    body: 'Esta tabela lista arquivos, regras violadas, severidade e ação esperada para o reviewer ou desenvolvedor.',
+    target: 'git-file-viewer',
+    title: 'Visão Lado a Lado',
+    body: 'Compare o código original (Base) com o novo código (Atual) para identificar mudanças e riscos arquiteturais.',
     placement: 'top'
   },
   {
-    target: 'comments-panel',
-    title: 'Comentários e decisão',
-    body: 'Registre não conformidades, aprovações, ajustes necessários e histórico de edição dos comentários.',
-    placement: 'top'
+    target: 'git-comment-panel',
+    title: 'Comentário Inline',
+    body: 'O Reviewer registra comentários vinculados à linha do código, definindo severidade e o ajuste necessário.',
+    placement: 'left'
+  },
+  {
+    target: 'nav-analysis',
+    title: 'Diagnósticos (Dev)',
+    body: 'O Desenvolvedor acessa esta tela para ver a lista técnica de problemas, findings e Problems do VS Code.',
+    placement: 'right',
+    beforeShow: 'analysis'
   },
   {
     target: 'validation-panel',
-    title: 'Validações',
-    body: 'Crie evidências formais de aprovado, ajuste ou reprovado e acompanhe tentativas de correção.',
+    title: 'Validações e Correções',
+    body: 'Aqui o Reviewer cria findings formais e o Desenvolvedor registra tentativas de correção para revalidação.',
     placement: 'top'
+  },
+  {
+    target: 'nav-collaboration',
+    title: 'Colaboração (Time)',
+    body: 'Reviewer e Developer conversam via threads, mencionam @pessoas e acompanham bloqueios de merge.',
+    placement: 'right',
+    beforeShow: 'collaboration'
+  },
+  {
+    target: 'quality-summary',
+    title: 'Status e Score',
+    body: 'O Dashboard consolida o score final. A sessão é aprovada quando todos os itens críticos e altos forem resolvidos.',
+    placement: 'bottom',
+    beforeShow: 'dashboard'
   },
   {
     target: 'persistence-actions',
     title: 'Persistência e backup',
-    body: 'Em Configurações, exporte o banco local, crie backup e sincronize com destino remoto configurado.',
+    body: 'Em Configurações, exporte o banco local, crie backup e sincronize com destino remoto.',
     placement: 'bottom',
     beforeShow: 'settings'
   }
