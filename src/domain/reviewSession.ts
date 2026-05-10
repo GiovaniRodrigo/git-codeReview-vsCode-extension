@@ -183,6 +183,14 @@ export function isReviewCommentStatus(value: string): value is ReviewCommentStat
   return REVIEW_COMMENT_STATUSES.includes(value as ReviewCommentStatus);
 }
 
+export function isReviewer(session: ReviewSession, user: string): boolean {
+  return session.reviewer === user || user === 'admin';
+}
+
+export function isAuthor(session: ReviewSession, user: string): boolean {
+  return session.author === user || user === 'admin';
+}
+
 export function createReviewSession(input: CreateReviewSessionInput): ReviewSession {
   if (!input.git.currentBranch) {
     throw new Error('A branch origem e obrigatoria para criar uma review session.');
@@ -277,6 +285,7 @@ export function registerPartialApproval(
 ): ReviewSession {
   if (!input.target.trim()) throw new Error('O alvo da aprovacao parcial e obrigatorio.');
   if (!input.reviewer.trim()) throw new Error('O reviewer da aprovacao parcial e obrigatorio.');
+  if (!isReviewer(session, input.reviewer)) throw new Error('Apenas o reviewer oficial ou admin pode realizar aprovacoes parciais.');
 
   const createdAt = (input.now ?? new Date()).toISOString();
   const approvals = session.partialApprovals ?? [];
@@ -292,7 +301,7 @@ export function registerPartialApproval(
     ...session,
     partialApprovals: [...approvals.filter((item) => !(item.scope === approval.scope && item.target === approval.target)), approval],
     updatedAt: createdAt,
-    history: appendHistory(session, 'PARTIAL_APPROVAL_REGISTERED', `Aprovacao por ${approval.scope}: ${approval.target}`, createdAt)
+    history: appendHistory(session, 'PARTIAL_APPROVAL_REGISTERED', `Aprovacao por ${approval.scope}: ${approval.target} realizada por ${input.reviewer}`, createdAt)
   };
 
   return updateMergeDecision(updated, new Date(createdAt));
@@ -347,6 +356,7 @@ export function isValidationSeverity(value: string): value is ValidationSeverity
 
 export function createValidationFinding(session: ReviewSession, input: CreateValidationFindingInput): ReviewSession {
   validateFindingInput(input);
+  if (!isReviewer(session, input.responsible)) throw new Error('Apenas o reviewer oficial ou admin pode registrar novos findings.');
 
   const findings = session.findings ?? [];
   const createdAt = (input.now ?? new Date()).toISOString();
@@ -373,7 +383,7 @@ export function createValidationFinding(session: ReviewSession, input: CreateVal
     ...session,
     findings: [...findings, finding],
     updatedAt: createdAt,
-    history: appendHistory(session, 'FINDING_CREATED', `Validacao criada: ${finding.rule} em ${finding.file}:${finding.line}`, createdAt)
+    history: appendHistory(session, 'FINDING_CREATED', `Validacao criada por ${input.responsible}: ${finding.rule} em ${finding.file}:${finding.line}`, createdAt)
   };
 }
 
@@ -381,11 +391,16 @@ export function updateValidationFindingStatus(
   session: ReviewSession,
   findingId: string,
   status: ValidationFindingStatus,
+  user: string,
   reason = '',
   now = new Date()
 ): ReviewSession {
   const { finding, findings } = findFinding(session, findingId);
   const updatedAt = now.toISOString();
+
+  if (status === 'APPROVED' && !isReviewer(session, user)) {
+    throw new Error('Apenas o reviewer oficial ou admin pode aprovar um finding.');
+  }
 
   return {
     ...session,
@@ -396,7 +411,7 @@ export function updateValidationFindingStatus(
       statusHistory: [...item.statusHistory, { status, changedAt: updatedAt, reason: reason || undefined }]
     } : item),
     updatedAt,
-    history: appendHistory(session, 'FINDING_STATUS_CHANGED', `Status da validacao ${finding.rule} alterado para ${status}`, updatedAt)
+    history: appendHistory(session, 'FINDING_STATUS_CHANGED', `Status da validacao ${finding.rule} alterado para ${status} por ${user}`, updatedAt)
   };
 }
 
@@ -408,6 +423,7 @@ export function registerCorrectionAttempt(
   if (!input.author.trim()) throw new Error('O autor da correcao e obrigatorio.');
   if (!input.commit.trim()) throw new Error('O commit da correcao e obrigatorio.');
   if (!input.description.trim()) throw new Error('A descricao da correcao e obrigatoria.');
+  if (!isAuthor(session, input.author)) throw new Error('Apenas o autor (dev) ou admin pode registrar tentativas de correcao.');
 
   const { finding, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? new Date()).toISOString();
@@ -429,7 +445,7 @@ export function registerCorrectionAttempt(
       statusHistory: [...item.statusHistory, { status: 'FIXED', changedAt: createdAt, reason: 'Correcao registrada' }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, 'CORRECTION_REGISTERED', `Correcao registrada para ${finding.rule}`, createdAt)
+    history: appendHistory(session, 'CORRECTION_REGISTERED', `Correcao registrada por ${input.author} para ${finding.rule}`, createdAt)
   };
 }
 
@@ -440,6 +456,7 @@ export function revalidateFinding(
 ): ReviewSession {
   if (!input.reviewer.trim()) throw new Error('O reviewer da revalidacao e obrigatorio.');
   if (!input.notes.trim()) throw new Error('As notas da revalidacao sao obrigatorias.');
+  if (!isReviewer(session, input.reviewer)) throw new Error('Apenas o reviewer oficial ou admin pode realizar revalidacoes.');
 
   const { finding, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? new Date()).toISOString();
@@ -461,7 +478,7 @@ export function revalidateFinding(
       statusHistory: [...item.statusHistory, { status: input.result, changedAt: createdAt, reason: 'Revalidacao' }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, 'FINDING_REVALIDATED', `Validacao revalidada: ${finding.rule} -> ${input.result}`, createdAt)
+    history: appendHistory(session, 'FINDING_REVALIDATED', `Validacao revalidada por ${input.reviewer}: ${finding.rule} -> ${input.result}`, createdAt)
   };
 }
 
@@ -535,6 +552,7 @@ export function updateReviewCommentStatus(
   session: ReviewSession,
   commentId: string,
   status: ReviewCommentStatus,
+  user: string,
   now = new Date()
 ): ReviewSession {
   const comments = session.comments ?? [];
@@ -542,6 +560,10 @@ export function updateReviewCommentStatus(
 
   if (!existing) {
     throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+
+  if (status === 'APPROVED' && !isReviewer(session, user)) {
+    throw new Error('Apenas o reviewer oficial ou admin pode aprovar um comentario.');
   }
 
   const updatedAt = now.toISOString();
@@ -555,7 +577,7 @@ export function updateReviewCommentStatus(
       {
         id: `${session.id}-comment-status-${session.history.length + 1}`,
         type: 'COMMENT_STATUS_CHANGED',
-        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status}`,
+        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status} por ${user}`,
         createdAt: updatedAt
       }
     ]
@@ -578,6 +600,10 @@ export function editReviewComment(
 
   if (!comment) {
     throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+
+  if (comment.author !== editor && editor !== 'admin') {
+    throw new Error('Apenas o autor original ou admin pode editar este comentario.');
   }
 
   const updatedAt = now.toISOString();
@@ -734,10 +760,15 @@ export function updateReviewSessionGitContext(
 export function updateReviewSessionStatus(
   session: ReviewSession,
   status: ReviewSessionStatus,
+  user: string,
   now = new Date()
 ): ReviewSession {
   if (session.status === status) {
     return session;
+  }
+
+  if (status === 'APPROVED' && !isReviewer(session, user)) {
+    throw new Error('Apenas o reviewer oficial ou admin pode aprovar a review session.');
   }
 
   const updatedAt = now.toISOString();
@@ -751,7 +782,7 @@ export function updateReviewSessionStatus(
       {
         id: `${session.id}-status-${session.history.length + 1}`,
         type: 'STATUS_CHANGED',
-        message: `Status alterado de ${session.status} para ${status}`,
+        message: `Status alterado de ${session.status} para ${status} por ${user}`,
         createdAt: updatedAt
       }
     ]

@@ -71,6 +71,7 @@ export interface DashboardState {
   intelligence: AssistedIntelligenceReport;
   performance: PerformanceState;
   integrations: IntegrationDescriptor[];
+  currentUser: string;
   vscode?: VSCodeContextState;
 }
 
@@ -89,8 +90,8 @@ export class ReviewSessionService {
     private readonly auditService?: AuditService
   ) {}
 
-  async getDashboardState(): Promise<DashboardState> {
-    const cached = this.dashboardCache.get('dashboard');
+  async getDashboardState(user: string): Promise<DashboardState> {
+    const cached = this.dashboardCache.get(`dashboard-${user}`);
     if (cached) return cached;
 
     const [currentSession, git, sessions] = await Promise.all([
@@ -111,10 +112,11 @@ export class ReviewSessionService {
         incrementalBatchSize: 25,
         asyncProcessingEnabled: true
       },
-      integrations: listIntegrationDescriptors()
+      integrations: listIntegrationDescriptors(),
+      currentUser: user
     };
 
-    this.dashboardCache.set('dashboard', state);
+    this.dashboardCache.set(`dashboard-${user}`, state);
     return state;
   }
 
@@ -155,14 +157,14 @@ export class ReviewSessionService {
     this.dashboardCache.clear();
   }
 
-  async updateStatus(id: string, status: ReviewSessionStatus): Promise<ReviewSession> {
+  async updateStatus(id: string, status: ReviewSessionStatus, user: string): Promise<ReviewSession> {
     const session = await this.repository.getById(id);
 
     if (!session) {
       throw new Error(`Review session nao encontrada: ${id}`);
     }
 
-    const updated = updateReviewSessionStatus(session, status);
+    const updated = updateReviewSessionStatus(session, status, user);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -184,9 +186,12 @@ export class ReviewSessionService {
     return updated;
   }
 
-  async updateCommentStatus(id: string, commentId: string, status: ReviewCommentStatus): Promise<ReviewSession> {
+  async updateCommentStatus(id: string, commentId: string, status: ReviewCommentStatus, user: string): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
-    const updated = updateReviewCommentStatus(session, commentId, status);
+    if (status === 'APPROVED' && !isReviewer(session, user)) {
+      throw new Error('Apenas o reviewer oficial ou admin pode aprovar um comentario.');
+    }
+    const updated = updateReviewCommentStatus(session, commentId, status, user);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -220,10 +225,11 @@ export class ReviewSessionService {
     id: string,
     findingId: string,
     status: ValidationFindingStatus,
+    user: string,
     reason?: string
   ): Promise<ReviewSession> {
     const session = await this.getExistingSession(id);
-    const updated = updateValidationFindingStatus(session, findingId, status, reason);
+    const updated = updateValidationFindingStatus(session, findingId, status, user, reason);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -263,7 +269,7 @@ export class ReviewSessionService {
       file: ruleFinding.file,
       line: ruleFinding.line,
       commit,
-      responsible: current.author
+      responsible: current.reviewer
     }), session);
 
     await this.saveAndAudit(updated);

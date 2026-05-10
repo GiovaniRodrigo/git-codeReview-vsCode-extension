@@ -34,7 +34,7 @@ __export(extension_exports, {
   deactivate: () => deactivate
 });
 module.exports = __toCommonJS(extension_exports);
-var vscode3 = __toESM(require("vscode"));
+var vscode4 = __toESM(require("vscode"));
 
 // src/domain/architectureRules.ts
 function analyzeArchitectureRules(files) {
@@ -162,6 +162,12 @@ function isReviewSessionStatus(value) {
 function isReviewCommentStatus(value) {
   return REVIEW_COMMENT_STATUSES.includes(value);
 }
+function isReviewer2(session, user) {
+  return session.reviewer === user || user === "admin";
+}
+function isAuthor(session, user) {
+  return session.author === user || user === "admin";
+}
 function createReviewSession(input) {
   if (!input.git.currentBranch) {
     throw new Error("A branch origem e obrigatoria para criar uma review session.");
@@ -241,6 +247,7 @@ function addCollaborationMessage(session, input) {
 function registerPartialApproval(session, input) {
   if (!input.target.trim()) throw new Error("O alvo da aprovacao parcial e obrigatorio.");
   if (!input.reviewer.trim()) throw new Error("O reviewer da aprovacao parcial e obrigatorio.");
+  if (!isReviewer2(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar aprovacoes parciais.");
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const approvals = session.partialApprovals ?? [];
   const approval = {
@@ -255,7 +262,7 @@ function registerPartialApproval(session, input) {
     ...session,
     partialApprovals: [...approvals.filter((item) => !(item.scope === approval.scope && item.target === approval.target)), approval],
     updatedAt: createdAt,
-    history: appendHistory(session, "PARTIAL_APPROVAL_REGISTERED", `Aprovacao por ${approval.scope}: ${approval.target}`, createdAt)
+    history: appendHistory(session, "PARTIAL_APPROVAL_REGISTERED", `Aprovacao por ${approval.scope}: ${approval.target} realizada por ${input.reviewer}`, createdAt)
   };
   return updateMergeDecision(updated, new Date(createdAt));
 }
@@ -287,6 +294,7 @@ function isValidationSeverity(value) {
 }
 function createValidationFinding(session, input) {
   validateFindingInput(input);
+  if (!isReviewer2(session, input.responsible)) throw new Error("Apenas o reviewer oficial ou admin pode registrar novos findings.");
   const findings = session.findings ?? [];
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const id = input.id ?? `${session.id}-finding-${findings.length + 1}`;
@@ -311,12 +319,15 @@ function createValidationFinding(session, input) {
     ...session,
     findings: [...findings, finding2],
     updatedAt: createdAt,
-    history: appendHistory(session, "FINDING_CREATED", `Validacao criada: ${finding2.rule} em ${finding2.file}:${finding2.line}`, createdAt)
+    history: appendHistory(session, "FINDING_CREATED", `Validacao criada por ${input.responsible}: ${finding2.rule} em ${finding2.file}:${finding2.line}`, createdAt)
   };
 }
-function updateValidationFindingStatus(session, findingId, status, reason = "", now = /* @__PURE__ */ new Date()) {
+function updateValidationFindingStatus(session, findingId, status, user, reason = "", now = /* @__PURE__ */ new Date()) {
   const { finding: finding2, findings } = findFinding(session, findingId);
   const updatedAt = now.toISOString();
+  if (status === "APPROVED" && !isReviewer2(session, user)) {
+    throw new Error("Apenas o reviewer oficial ou admin pode aprovar um finding.");
+  }
   return {
     ...session,
     findings: findings.map((item) => item.id === findingId ? {
@@ -326,13 +337,14 @@ function updateValidationFindingStatus(session, findingId, status, reason = "", 
       statusHistory: [...item.statusHistory, { status, changedAt: updatedAt, reason: reason || void 0 }]
     } : item),
     updatedAt,
-    history: appendHistory(session, "FINDING_STATUS_CHANGED", `Status da validacao ${finding2.rule} alterado para ${status}`, updatedAt)
+    history: appendHistory(session, "FINDING_STATUS_CHANGED", `Status da validacao ${finding2.rule} alterado para ${status} por ${user}`, updatedAt)
   };
 }
 function registerCorrectionAttempt(session, findingId, input) {
   if (!input.author.trim()) throw new Error("O autor da correcao e obrigatorio.");
   if (!input.commit.trim()) throw new Error("O commit da correcao e obrigatorio.");
   if (!input.description.trim()) throw new Error("A descricao da correcao e obrigatoria.");
+  if (!isAuthor(session, input.author)) throw new Error("Apenas o autor (dev) ou admin pode registrar tentativas de correcao.");
   const { finding: finding2, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const attempt = {
@@ -352,12 +364,13 @@ function registerCorrectionAttempt(session, findingId, input) {
       statusHistory: [...item.statusHistory, { status: "FIXED", changedAt: createdAt, reason: "Correcao registrada" }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, "CORRECTION_REGISTERED", `Correcao registrada para ${finding2.rule}`, createdAt)
+    history: appendHistory(session, "CORRECTION_REGISTERED", `Correcao registrada por ${input.author} para ${finding2.rule}`, createdAt)
   };
 }
 function revalidateFinding(session, findingId, input) {
   if (!input.reviewer.trim()) throw new Error("O reviewer da revalidacao e obrigatorio.");
   if (!input.notes.trim()) throw new Error("As notas da revalidacao sao obrigatorias.");
+  if (!isReviewer2(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar revalidacoes.");
   const { finding: finding2, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const revalidation = {
@@ -377,7 +390,7 @@ function revalidateFinding(session, findingId, input) {
       statusHistory: [...item.statusHistory, { status: input.result, changedAt: createdAt, reason: "Revalidacao" }]
     } : item),
     updatedAt: createdAt,
-    history: appendHistory(session, "FINDING_REVALIDATED", `Validacao revalidada: ${finding2.rule} -> ${input.result}`, createdAt)
+    history: appendHistory(session, "FINDING_REVALIDATED", `Validacao revalidada por ${input.reviewer}: ${finding2.rule} -> ${input.result}`, createdAt)
   };
 }
 function addReviewComment(session, input) {
@@ -427,11 +440,14 @@ function addReviewComment(session, input) {
     ]
   });
 }
-function updateReviewCommentStatus(session, commentId, status, now = /* @__PURE__ */ new Date()) {
+function updateReviewCommentStatus(session, commentId, status, user, now = /* @__PURE__ */ new Date()) {
   const comments = session.comments ?? [];
   const existing = comments.find((item) => item.id === commentId);
   if (!existing) {
     throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+  if (status === "APPROVED" && !isReviewer2(session, user)) {
+    throw new Error("Apenas o reviewer oficial ou admin pode aprovar um comentario.");
   }
   const updatedAt = now.toISOString();
   return recalculateReviewSessionByComments({
@@ -443,7 +459,7 @@ function updateReviewCommentStatus(session, commentId, status, now = /* @__PURE_
       {
         id: `${session.id}-comment-status-${session.history.length + 1}`,
         type: "COMMENT_STATUS_CHANGED",
-        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status}`,
+        message: `Status do comentario alterado em ${existing.file}:${existing.line} para ${status} por ${user}`,
         createdAt: updatedAt
       }
     ]
@@ -457,6 +473,9 @@ function editReviewComment(session, commentId, body, editor, now = /* @__PURE__ 
   const comment = existingComments.find((item) => item.id === commentId);
   if (!comment) {
     throw new Error(`Comentario nao encontrado: ${commentId}`);
+  }
+  if (comment.author !== editor && editor !== "admin") {
+    throw new Error("Apenas o autor original ou admin pode editar este comentario.");
   }
   const updatedAt = now.toISOString();
   const comments = existingComments.map((item) => {
@@ -572,9 +591,12 @@ function updateReviewSessionGitContext(session, git2, now = /* @__PURE__ */ new 
     ]
   };
 }
-function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Date()) {
+function updateReviewSessionStatus(session, status, user, now = /* @__PURE__ */ new Date()) {
   if (session.status === status) {
     return session;
+  }
+  if (status === "APPROVED" && !isReviewer2(session, user)) {
+    throw new Error("Apenas o reviewer oficial ou admin pode aprovar a review session.");
   }
   const updatedAt = now.toISOString();
   return {
@@ -586,7 +608,7 @@ function updateReviewSessionStatus(session, status, now = /* @__PURE__ */ new Da
       {
         id: `${session.id}-status-${session.history.length + 1}`,
         type: "STATUS_CHANGED",
-        message: `Status alterado de ${session.status} para ${status}`,
+        message: `Status alterado de ${session.status} para ${status} por ${user}`,
         createdAt: updatedAt
       }
     ]
@@ -1086,8 +1108,8 @@ var ReviewSessionService = class {
     this.auditService = auditService;
     this.dashboardCache = new LocalTtlCache(1500);
   }
-  async getDashboardState() {
-    const cached = this.dashboardCache.get("dashboard");
+  async getDashboardState(user) {
+    const cached = this.dashboardCache.get(`dashboard-${user}`);
     if (cached) return cached;
     const [currentSession, git2, sessions] = await Promise.all([
       this.repository.getCurrent(),
@@ -1107,9 +1129,10 @@ var ReviewSessionService = class {
         incrementalBatchSize: 25,
         asyncProcessingEnabled: true
       },
-      integrations: listIntegrationDescriptors()
+      integrations: listIntegrationDescriptors(),
+      currentUser: user
     };
-    this.dashboardCache.set("dashboard", state);
+    this.dashboardCache.set(`dashboard-${user}`, state);
     return state;
   }
   async startReview(author, reviewer) {
@@ -1138,12 +1161,12 @@ var ReviewSessionService = class {
     await this.repository.delete(id);
     this.dashboardCache.clear();
   }
-  async updateStatus(id, status) {
+  async updateStatus(id, status, user) {
     const session = await this.repository.getById(id);
     if (!session) {
       throw new Error(`Review session nao encontrada: ${id}`);
     }
-    const updated = updateReviewSessionStatus(session, status);
+    const updated = updateReviewSessionStatus(session, status, user);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -1159,9 +1182,12 @@ var ReviewSessionService = class {
     await this.saveAndAudit(updated);
     return updated;
   }
-  async updateCommentStatus(id, commentId, status) {
+  async updateCommentStatus(id, commentId, status, user) {
     const session = await this.getExistingSession(id);
-    const updated = updateReviewCommentStatus(session, commentId, status);
+    if (status === "APPROVED" && !isReviewer(session, user)) {
+      throw new Error("Apenas o reviewer oficial ou admin pode aprovar um comentario.");
+    }
+    const updated = updateReviewCommentStatus(session, commentId, status, user);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -1177,9 +1203,9 @@ var ReviewSessionService = class {
     await this.saveAndAudit(updated);
     return updated;
   }
-  async updateFindingStatus(id, findingId, status, reason) {
+  async updateFindingStatus(id, findingId, status, user, reason) {
     const session = await this.getExistingSession(id);
-    const updated = updateValidationFindingStatus(session, findingId, status, reason);
+    const updated = updateValidationFindingStatus(session, findingId, status, user, reason);
     await this.saveAndAudit(updated);
     return updated;
   }
@@ -1207,7 +1233,7 @@ var ReviewSessionService = class {
       file: ruleFinding.file,
       line: ruleFinding.line,
       commit,
-      responsible: current.author
+      responsible: current.reviewer
     }), session);
     await this.saveAndAudit(updated);
     return { session: updated, findings };
@@ -1508,7 +1534,7 @@ var ReviewPanel = class {
       await this.postState();
     }
     if (message.type === "updateReviewStatus" && typeof message.payload?.id === "string" && typeof message.payload?.status === "string" && isReviewSessionStatus(message.payload.status)) {
-      await this.service.updateStatus(message.payload.id, message.payload.status);
+      await this.service.updateStatus(message.payload.id, message.payload.status, vscode2.env.machineId);
       await this.postState();
     }
     if (message.type === "navigateReview" && typeof message.payload?.id === "string" && isNavigationKind(message.payload.kind) && typeof message.payload.ref === "string") {
@@ -1535,8 +1561,7 @@ var ReviewPanel = class {
       await this.postState();
     }
     if (message.type === "updateReviewCommentStatus" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.status === "string" && isReviewCommentStatus(message.payload.status)) {
-      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status);
-      await this.refreshReviewDecorations();
+      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status, vscode2.env.machineId);
       await this.postState();
     }
     if (message.type === "editReviewComment" && typeof message.payload?.id === "string" && typeof message.payload.commentId === "string" && typeof message.payload.body === "string") {
@@ -1556,7 +1581,7 @@ var ReviewPanel = class {
       await this.postState();
     }
     if (message.type === "updateValidationFindingStatus" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.status === "string" && isValidationFindingStatus(message.payload.status)) {
-      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status);
+      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status, vscode2.env.machineId);
       await this.postState();
     }
     if (message.type === "registerCorrectionAttempt" && typeof message.payload?.id === "string" && typeof message.payload.findingId === "string" && typeof message.payload.commit === "string" && typeof message.payload.description === "string") {
@@ -1616,7 +1641,7 @@ var ReviewPanel = class {
       this.post({ type: "operationCompleted", payload: { message: `Diff aberto: ${message.payload.file}` } });
     }
     if (message.type === "exportReviewReport") {
-      const state = await this.service.getDashboardState();
+      const state = await this.service.getDashboardState(vscode2.env.machineId);
       const report = buildMarkdownReport(state);
       const document = await vscode2.workspace.openTextDocument({ content: report, language: "markdown" });
       await vscode2.window.showTextDocument(document, { preview: false });
@@ -1781,7 +1806,7 @@ var ReviewPanel = class {
     this.post({ type: "operationFailed", payload: { message } });
   }
   async postState() {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode2.env.machineId);
     const vscodeContext = await this.collectVSCodeContext();
     this.post({ type: "dashboardState", payload: { ...state, vscode: vscodeContext } });
   }
@@ -1817,7 +1842,7 @@ var ReviewPanel = class {
     }
   }
   async refreshReviewDecorations() {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode2.env.machineId);
     const editor = vscode2.window.activeTextEditor;
     if (!editor || !state.currentSession) return;
     const activeFile = vscode2.workspace.asRelativePath(editor.document.uri, false);
@@ -1927,6 +1952,7 @@ function getNonce() {
 }
 
 // src/presentation/reviewSidebarProvider.ts
+var vscode3 = __toESM(require("vscode"));
 var ReviewSidebarProvider = class {
   constructor(service) {
     this.service = service;
@@ -1935,7 +1961,7 @@ var ReviewSidebarProvider = class {
     this.viewType = "codeReview.sidebar";
   }
   async resolveWebviewView(webviewView) {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode3.env.machineId);
     const session = state.currentSession;
     webviewView.webview.options = { enableScripts: false };
     webviewView.webview.html = `<!doctype html>
@@ -2010,7 +2036,7 @@ function sha256(value) {
 
 // src/extension.ts
 function activate(context) {
-  const workspaceFolder = vscode3.workspace.workspaceFolders?.[0];
+  const workspaceFolder = vscode4.workspace.workspaceFolders?.[0];
   const repository = new LocalJsonReviewSessionRepository(context);
   const gitService = new GitCliService(workspaceFolder);
   const sourceFileProvider = new WorkspaceSourceFileProvider(workspaceFolder);
@@ -2018,34 +2044,34 @@ function activate(context) {
   const reviewSessionService = new ReviewSessionService(repository, gitService, sourceFileProvider, auditService);
   const reviewPanel = new ReviewPanel(context, reviewSessionService);
   context.subscriptions.push(
-    vscode3.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),
-    vscode3.commands.registerCommand("codeReview.openDashboard", () => reviewPanel.open("dashboard")),
-    vscode3.commands.registerCommand("codeReview.startReview", () => reviewPanel.startReview()),
-    vscode3.commands.registerCommand("codeReview.openPullRequest", () => reviewPanel.open("dashboard")),
-    vscode3.commands.registerCommand("codeReview.exportAuditLog", async () => {
+    vscode4.window.registerWebviewViewProvider(ReviewSidebarProvider.viewType, new ReviewSidebarProvider(reviewSessionService)),
+    vscode4.commands.registerCommand("codeReview.openDashboard", () => reviewPanel.open("dashboard")),
+    vscode4.commands.registerCommand("codeReview.startReview", () => reviewPanel.startReview()),
+    vscode4.commands.registerCommand("codeReview.openPullRequest", () => reviewPanel.open("dashboard")),
+    vscode4.commands.registerCommand("codeReview.exportAuditLog", async () => {
       const data = await reviewSessionService.exportAuditData();
       await openJsonDocument(data || "Nenhum registro de auditoria encontrado.");
     }),
-    vscode3.commands.registerCommand("codeReview.exportLocalDatabase", async () => {
+    vscode4.commands.registerCommand("codeReview.exportLocalDatabase", async () => {
       const data = await reviewSessionService.exportLocalDatabase();
       await openJsonDocument(data);
     }),
-    vscode3.commands.registerCommand("codeReview.createBackup", async () => {
+    vscode4.commands.registerCommand("codeReview.createBackup", async () => {
       const backupPath = await reviewSessionService.createBackup();
-      vscode3.window.showInformationMessage(`Backup de Code Review criado em: ${backupPath}`);
+      vscode4.window.showInformationMessage(`Backup de Code Review criado em: ${backupPath}`);
     }),
-    vscode3.commands.registerCommand("codeReview.syncRemote", async () => {
+    vscode4.commands.registerCommand("codeReview.syncRemote", async () => {
       const syncedPath = await reviewSessionService.syncRemote();
-      vscode3.window.showInformationMessage(`Sincronizacao de Code Review concluida em: ${syncedPath}`);
+      vscode4.window.showInformationMessage(`Sincronizacao de Code Review concluida em: ${syncedPath}`);
     })
   );
 }
 async function openJsonDocument(content) {
-  const document = await vscode3.workspace.openTextDocument({
+  const document = await vscode4.workspace.openTextDocument({
     content,
     language: "json"
   });
-  await vscode3.window.showTextDocument(document, { preview: false });
+  await vscode4.window.showTextDocument(document, { preview: false });
 }
 function deactivate() {
 }

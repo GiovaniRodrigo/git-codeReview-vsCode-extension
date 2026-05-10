@@ -39,7 +39,7 @@ test('builds correction architecture refactor and explanation suggestions', () =
       file: 'src/application/reviewSessionService.ts',
       line: 12,
       commit: 'abc123',
-      responsible: 'Developer',
+      responsible: 'Reviewer',
       id: 'finding-1'
     }
   );
@@ -63,7 +63,7 @@ test('finds recurring errors patterns comparisons and automatic recommendations'
       file: 'src/a.ts',
       line: 1,
       commit: 'abc123',
-      responsible: 'Developer',
+      responsible: 'Reviewer',
       id: 'finding-current'
     }
   );
@@ -76,7 +76,7 @@ test('finds recurring errors patterns comparisons and automatic recommendations'
       file: 'src/b.ts',
       line: 1,
       commit: 'def456',
-      responsible: 'Developer',
+      responsible: 'Reviewer',
       id: 'finding-old'
     }
   );

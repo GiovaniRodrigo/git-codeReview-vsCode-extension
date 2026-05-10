@@ -28,7 +28,7 @@ test('lists sessions and opens an existing review as current', async () => {
 
   await service.startReview('Developer', 'Reviewer');
   const opened = await service.openReview(first.id);
-  const state = await service.getDashboardState();
+  const state = await service.getDashboardState('Reviewer');
 
   assert.equal(opened.id, first.id);
   assert.equal(state.currentSession?.id, first.id);
@@ -47,7 +47,7 @@ test('deletes an existing review session from the repository', async () => {
   const session = await service.startReview('Developer', 'Reviewer');
 
   await service.deleteReview(session.id);
-  const state = await service.getDashboardState();
+  const state = await service.getDashboardState('Reviewer');
 
   assert.equal(state.currentSession, undefined);
   assert.equal(state.sessions.length, 0);
@@ -57,7 +57,7 @@ test('updates review status and appends audit history', async () => {
   const service = new ReviewSessionService(new MemoryReviewSessionRepository(), new StaticGitService(git));
   const session = await service.startReview('Developer', 'Reviewer');
 
-  const updated = await service.updateStatus(session.id, 'IN_REVIEW');
+  const updated = await service.updateStatus(session.id, 'IN_REVIEW', 'Reviewer');
 
   assert.equal(updated.status, 'IN_REVIEW');
   assert.equal(updated.history.length, 2);
@@ -101,7 +101,7 @@ test('manages validation findings correction and revalidation through the applic
     file: 'src/extension.ts',
     line: 10,
     commit: 'abc123',
-    responsible: 'Developer'
+    responsible: 'Reviewer'
   });
   const findingId = withFinding.findings[0].id;
 

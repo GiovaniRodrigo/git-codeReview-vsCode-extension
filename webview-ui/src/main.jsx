@@ -210,7 +210,7 @@ function ReviewCenter({ view, state, onStartReview }) {
   if (view === 'intelligence') return <IntelligenceCenter state={state} />;
   if (view === 'collaboration') return <CollaborationCenter state={state} />;
   if (view === 'comments') return <CommentsCenter state={state} />;
-  if (view === 'git-review') return <GitReviewCenter state={state} />;
+  if (view === 'git-review') return <GitReviewCenter state={state} currentUser={state?.currentUser} />;
   if (view === 'settings') return <SettingsCenter state={state} />;
   if (view === 'conformities') return <ConformitiesCenter state={state} />;
 
@@ -305,12 +305,12 @@ function DiagnosticsCenter({ state, onStartReview }) {
           <p className="muted">Use esta tela para encontrar a causa do problema, abrir arquivo/diff e associar comentários ao trecho correto.</p>
           <div data-tour="findings-table"><FindingsTable changedFiles={state?.git?.changedFiles} /></div>
           <VSCodeContextPanel vscodeContext={state?.vscode} />
-          <ValidationFindingsPanel session={session} git={state?.git} />
+          <ValidationFindingsPanel session={session} git={state?.git} currentUser={state?.currentUser} />
           <ArchitectureRulesPanel session={session} />
         </div>
         <aside className="workspace-side">
           <h3>Comentários técnicos</h3>
-          <CommentsPanel session={session} />
+          <CommentsPanel session={session} currentUser={state?.currentUser} />
         </aside>
       </section>
     </main>
@@ -318,7 +318,7 @@ function DiagnosticsCenter({ state, onStartReview }) {
 }
 
 
-function GitReviewCenter({ state }) {
+function GitReviewCenter({ state, currentUser }) {
   const session = state?.currentSession;
   const git = state?.git ?? {};
   const baseFiles = session?.changedFiles?.length ? session.changedFiles : (git.changedFiles ?? []);
@@ -332,6 +332,7 @@ function GitReviewCenter({ state }) {
   const [commentBody, setCommentBody] = useState('Solicitar ajuste neste trecho.');
   const [commentSeverity, setCommentSeverity] = useState('MEDIUM');
   const [commentStatus, setCommentStatus] = useState('NEEDS_CHANGES');
+  const canApprove = isReviewer(session, currentUser);
 
   const requestFile = (file = selectedFile, commit = selectedCommit) => {
     if (!file) {
@@ -511,18 +512,20 @@ function GitReviewCenter({ state }) {
           <label>Linha<input type="number" min="1" value={commentLine} onChange={(event) => setCommentLine(event.target.value)} /></label>
           <label>Commit<input value={selectedCommit} onChange={(event) => setSelectedCommit(event.target.value)} /></label>
           <label>Severidade<select value={commentSeverity} onChange={(event) => setCommentSeverity(event.target.value)}><option value="LOW">Baixa</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option><option value="CRITICAL">Crítica</option></select></label>
-          <label>Status<select value={commentStatus} onChange={(event) => setCommentStatus(event.target.value)}><option value="OPEN">Aberto</option><option value="NEEDS_CHANGES">Ajuste solicitado</option><option value="RESOLVED">Resolvido</option><option value="APPROVED">Aprovado</option></select></label>
+          <label>Status<select value={commentStatus} onChange={(event) => setCommentStatus(event.target.value)}>
+            <option value="OPEN">Aberto</option>
+            <option value="NEEDS_CHANGES">Ajuste solicitado</option>
+            <option value="RESOLVED">Resolvido</option>
+            {canApprove && <option value="APPROVED">Aprovado</option>}
+          </select></label>
           <label>Comentário<textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} /></label>
           <button className="primary full" disabled={!session || !selectedFile || !commentBody.trim()} onClick={submitComment}><MessageSquare size={16} /> Publicar comentário</button>
           {!session && <p className="empty-state">Crie uma sessão de review antes de comentar.</p>}
           <div className="comments-list compact-comments">
             {(session?.comments ?? []).filter((comment) => comment.file === selectedFile).map((comment) => (
-              <article key={comment.id} className="comment-item">
-                <header><span>{comment.file}:{comment.line}</span></header>
-                <p>{comment.body}</p>
-                <small>{comment.commit ?? 'sem commit'} · {comment.severity ?? 'MEDIUM'} · {comment.status ?? 'NEEDS_CHANGES'} · público</small>
-              </article>
+              <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} />
             ))}
+            {!(session?.comments ?? []).filter((comment) => comment.file === selectedFile).length && <p className="empty-state">Nenhum comentário para este arquivo.</p>}
           </div>
         </aside>
       </section>
@@ -616,7 +619,7 @@ function NavigationPanel({ session, git }) {
   );
 }
 
-function CommentsPanel({ session, full = false }) {
+function CommentsPanel({ session, currentUser, full = false }) {
   const files = useMemo(() => {
     const fromSession = session?.changedFiles ?? [];
     const fromComments = (session?.comments ?? []).map((comment) => comment.file).filter(Boolean);
@@ -736,9 +739,9 @@ function CommentsPanel({ session, full = false }) {
         {Object.keys(groupedComments).length ? Object.entries(groupedComments).map(([file, items]) => (
           <section className="comment-file-group" key={file}>
             {full && <header><strong>{file}</strong><span>{items.length} comentário(s)</span></header>}
-            {items.map((comment) => <CommentItem key={comment.id} session={session} comment={comment} showThread={full} />)}
-          </section>
-        )) : <p className="empty-state">Nenhum comentário encontrado para os filtros atuais.</p>}
+            {items.map((comment) => <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} showThread={full} />)}
+            </section>
+            )) : <p className="empty-state">Nenhum comentário encontrado para os filtros atuais.</p>}
       </div>
     </section>
   );
@@ -753,7 +756,7 @@ function calculateCommentImpact(comments = []) {
 }
 
 
-function ValidationFindingsPanel({ session, git }) {
+function ValidationFindingsPanel({ session, git, currentUser }) {
   const [rule, setRule] = useState('DIP');
   const [severity, setSeverity] = useState('HIGH');
   const [description, setDescription] = useState('Dependência concreta detectada na camada de aplicação.');
@@ -807,7 +810,7 @@ function ValidationFindingsPanel({ session, git }) {
       </div>
       <div className="findings-list">
         {session?.findings?.length ? session.findings.map((finding) => (
-          <FindingItem key={finding.id} session={session} finding={finding} />
+          <FindingItem key={finding.id} session={session} finding={finding} currentUser={state?.currentUser} />
         )) : <p className="empty-state">Nenhuma validação registrada nesta sessão.</p>}
       </div>
     </section>
@@ -878,7 +881,7 @@ function IntelligencePanel({ intelligence }) {
   );
 }
 
-function CollaborationPanel({ session }) {
+function CollaborationPanel({ session, currentUser }) {
   const [message, setMessage] = useState('Pode validar este módulo @dev?');
   const [mention, setMention] = useState(session?.author ?? 'dev');
   const [threadTarget, setThreadTarget] = useState(session?.comments?.[0]?.threadId ?? 'review-geral');
@@ -897,6 +900,7 @@ function CollaborationPanel({ session }) {
   const threadOptions = Array.from(new Set(['review-geral', ...comments.map((comment) => comment.threadId || `${comment.file}:${comment.line}`), ...messages.map((item) => item.threadId)])).filter(Boolean);
   const selectedThreadMessages = messages.filter((item) => (item.threadId || item.id) === threadTarget);
   const assigneeOptions = Array.from(new Set([session?.author, session?.reviewer, 'dev', 'reviewer', ...comments.map((comment) => comment.author)])).filter(Boolean);
+  const canApprove = isReviewer(session, currentUser);
 
   useEffect(() => {
     if (session?.author && mention === 'dev') setMention(session.author);
@@ -968,9 +972,9 @@ function CollaborationPanel({ session }) {
           </div>
 
           <div className="workflow-actions collaboration-actions">
-            <button disabled={!session || !firstFile} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
-            <button disabled={!session || !firstFile} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
-            <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
+            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
+            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
+            <button disabled={!session || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
           </div>
 
           <section className="sessions-panel nested-panel">
@@ -1071,8 +1075,18 @@ function VSCodeContextPanel({ vscodeContext }) {
   );
 }
 
-function FindingItem({ session, finding }) {
+function isReviewer(session, user) {
+  return session?.reviewer === user || user === 'admin';
+}
+
+function isAuthor(session, user) {
+  return session?.author === user || user === 'admin';
+}
+
+function FindingItem({ session, finding, currentUser }) {
   const correctionCommit = session.commits?.[0] ?? 'HEAD';
+  const canApprove = isReviewer(session, currentUser);
+  const canCorrect = isAuthor(session, currentUser);
 
   return (
     <article className="finding-item">
@@ -1088,6 +1102,7 @@ function FindingItem({ session, finding }) {
         {['NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'].map((status) => (
           <button
             key={status}
+            disabled={status === 'APPROVED' && !canApprove}
             className={finding.status === status ? 'active' : ''}
             onClick={() => vscodeApi?.postMessage({ type: 'updateValidationFindingStatus', payload: { id: session.id, findingId: finding.id, status } })}
           >
@@ -1096,15 +1111,15 @@ function FindingItem({ session, finding }) {
         ))}
       </div>
       <div className="finding-actions">
-        <button onClick={() => vscodeApi?.postMessage({
+        <button disabled={!canCorrect} onClick={() => vscodeApi?.postMessage({
           type: 'registerCorrectionAttempt',
           payload: { id: session.id, findingId: finding.id, commit: correctionCommit, description: 'Correção registrada pelo responsável.' }
         })}>Registrar correção</button>
-        <button onClick={() => vscodeApi?.postMessage({
+        <button disabled={!canApprove} onClick={() => vscodeApi?.postMessage({
           type: 'revalidateFinding',
           payload: { id: session.id, findingId: finding.id, result: 'APPROVED', notes: 'Revalidação aprovada.' }
         })}>Aprovar revalidação</button>
-        <button onClick={() => vscodeApi?.postMessage({
+        <button disabled={!canApprove} onClick={() => vscodeApi?.postMessage({
           type: 'revalidateFinding',
           payload: { id: session.id, findingId: finding.id, result: 'REOPENED', notes: 'Reaberto após nova análise.' }
         })}>Reabrir</button>
@@ -1118,11 +1133,13 @@ function FindingItem({ session, finding }) {
   );
 }
 
-function CommentItem({ session, comment, showThread = false }) {
+function CommentItem({ session, comment, currentUser, showThread = false }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(comment.body);
   const history = comment.history ?? [];
   const threadLabel = comment.threadId || `${comment.file}:${comment.line}`;
+  const canApprove = isReviewer(session, currentUser);
+  const canEdit = comment.author === currentUser || currentUser === 'admin';
 
   const openFile = () => vscodeApi?.postMessage({
     type: 'openWorkspaceFile',
@@ -1140,7 +1157,7 @@ function CommentItem({ session, comment, showThread = false }) {
         <div className="comment-header-actions">
           <button onClick={openFile}>Arquivo</button>
           <button onClick={openDiff}>Diff</button>
-          <button onClick={() => setEditing((value) => !value)}><Pencil size={15} /></button>
+          <button disabled={!canEdit} onClick={() => setEditing((value) => !value)} title={canEdit ? 'Editar comentário' : 'Apenas o autor pode editar'}><Pencil size={15} /></button>
         </div>
       </header>
       {editing ? (
@@ -1162,6 +1179,7 @@ function CommentItem({ session, comment, showThread = false }) {
         {['OPEN', 'NEEDS_CHANGES', 'RESOLVED', 'APPROVED'].map((status) => (
           <button
             key={status}
+            disabled={status === 'APPROVED' && !canApprove}
             className={(comment.status ?? 'NEEDS_CHANGES') === status ? 'active' : ''}
             onClick={() => vscodeApi?.postMessage({ type: 'updateReviewCommentStatus', payload: { id: session.id, commentId: comment.id, status } })}
           >
@@ -1296,7 +1314,7 @@ function Timeline({ session }) {
   return <div className="timeline">{steps.map(([title, text], index) => <div key={`${title}-${index}`}><b>{title}</b><p>{text}</p></div>)}</div>;
 }
 
-function ReviewSessionsPanel({ sessions = [], currentSession }) {
+function ReviewSessionsPanel({ sessions = [], currentSession, currentUser }) {
   return (
     <section className="sessions-panel">
       <div className="section-title">
@@ -1304,7 +1322,7 @@ function ReviewSessionsPanel({ sessions = [], currentSession }) {
           <h2>Sessões de review</h2>
           <p className="muted">Histórico local das sessões registradas neste workspace.</p>
         </div>
-        {currentSession && <StatusControls session={currentSession} />}
+        {currentSession && <StatusControls session={currentSession} currentUser={currentUser} />}
       </div>
       <div className="sessions-list">
         {sessions.length ? sessions.map((session) => (
@@ -1326,14 +1344,16 @@ function ReviewSessionsPanel({ sessions = [], currentSession }) {
   );
 }
 
-function StatusControls({ session }) {
+function StatusControls({ session, currentUser }) {
   const statuses = ['OPEN', 'IN_REVIEW', 'NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'];
+  const canApprove = isReviewer(session, currentUser);
 
   return (
     <div className="status-controls" aria-label="Status da revisão">
       {statuses.map((status) => (
         <button
           key={status}
+          disabled={status === 'APPROVED' && !canApprove}
           className={session.status === status ? 'active' : ''}
           onClick={() => vscodeApi?.postMessage({ type: 'updateReviewStatus', payload: { id: session.id, status } })}
         >
@@ -1516,7 +1536,7 @@ function CollaborationCenter({ state }) {
       <header className="center-header">
         <div><span className="eyebrow">Colaboração</span><h1>Fluxo reviewer/developer</h1><p>Comunicação, aprovações parciais e bloqueio de merge.</p></div>
       </header>
-      <CollaborationPanel session={state?.currentSession} />
+      <CollaborationPanel session={state?.currentSession} currentUser={state?.currentUser} />
     </main>
   );
 }
@@ -1641,7 +1661,7 @@ function HistoryCenter({ state }) {
         <span>{sessions.length} sessões registradas</span>
       </section>
       <section className="history-layout">
-        <ReviewSessionsPanel sessions={sessions} currentSession={state?.currentSession} />
+        <ReviewSessionsPanel sessions={sessions} currentSession={state?.currentSession} currentUser={state?.currentUser} />
         <section className="review-workspace single history-detail">
           <div className="workspace-main">
             <h2>Timeline da sessão atual</h2>
@@ -1667,7 +1687,7 @@ function CommentsCenter({ state }) {
           <button disabled={!session} className="primary" onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session?.id } })}><RefreshCw size={16} /> Recalcular score/status</button>
         </div>
       </header>
-      <CommentsPanel session={session} full />
+      <CommentsPanel session={session} currentUser={state?.currentUser} full />
     </main>
   );
 }

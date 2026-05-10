@@ -87,7 +87,7 @@ export class ReviewPanel {
       && typeof message.payload?.status === 'string'
       && isReviewSessionStatus(message.payload.status)
     ) {
-      await this.service.updateStatus(message.payload.id, message.payload.status);
+      await this.service.updateStatus(message.payload.id, message.payload.status, vscode.env.machineId);
       await this.postState();
     }
 
@@ -126,7 +126,6 @@ export class ReviewPanel {
       await this.refreshReviewDecorations();
       await this.postState();
     }
-
     if (
       message.type === 'updateReviewCommentStatus'
       && typeof message.payload?.id === 'string'
@@ -134,8 +133,7 @@ export class ReviewPanel {
       && typeof message.payload.status === 'string'
       && isReviewCommentStatus(message.payload.status)
     ) {
-      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status);
-      await this.refreshReviewDecorations();
+      await this.service.updateCommentStatus(message.payload.id, message.payload.commentId, message.payload.status, vscode.env.machineId);
       await this.postState();
     }
 
@@ -179,7 +177,7 @@ export class ReviewPanel {
       && typeof message.payload.status === 'string'
       && isValidationFindingStatus(message.payload.status)
     ) {
-      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status);
+      await this.service.updateFindingStatus(message.payload.id, message.payload.findingId, message.payload.status, vscode.env.machineId);
       await this.postState();
     }
 
@@ -270,7 +268,7 @@ export class ReviewPanel {
     }
 
     if (message.type === 'exportReviewReport') {
-      const state = await this.service.getDashboardState();
+      const state = await this.service.getDashboardState(vscode.env.machineId);
       const report = buildMarkdownReport(state);
       const document = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' });
       await vscode.window.showTextDocument(document, { preview: false });
@@ -488,7 +486,7 @@ export class ReviewPanel {
   }
 
   private async postState(): Promise<void> {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode.env.machineId);
     const vscodeContext = await this.collectVSCodeContext();
     this.post({ type: 'dashboardState', payload: { ...state, vscode: vscodeContext } });
   }
@@ -532,7 +530,7 @@ export class ReviewPanel {
   }
 
   private async refreshReviewDecorations(): Promise<void> {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode.env.machineId);
     const editor = vscode.window.activeTextEditor;
     if (!editor || !state.currentSession) return;
 

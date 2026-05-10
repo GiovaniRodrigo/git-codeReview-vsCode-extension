@@ -7,7 +7,7 @@ export class ReviewSidebarProvider implements vscode.WebviewViewProvider {
   constructor(private readonly service: ReviewSessionService) {}
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
-    const state = await this.service.getDashboardState();
+    const state = await this.service.getDashboardState(vscode.env.machineId);
     const session = state.currentSession;
 
     webviewView.webview.options = { enableScripts: false };

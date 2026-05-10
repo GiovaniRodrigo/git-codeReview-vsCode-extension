@@ -49,7 +49,7 @@ test('calculates quality score frequency recurrence and correction time', () => 
     file: 'src/extension.ts',
     line: 10,
     commit: 'abc123',
-    responsible: 'Developer',
+    responsible: 'Reviewer',
     now: new Date('2026-05-08T11:00:00.000Z'),
     id: 'finding-1'
   });
@@ -60,7 +60,7 @@ test('calculates quality score frequency recurrence and correction time', () => 
     file: 'src/extension.ts',
     line: 20,
     commit: 'abc123',
-    responsible: 'Developer',
+    responsible: 'Reviewer',
     now: new Date('2026-05-08T12:00:00.000Z'),
     id: 'finding-2'
   });

@@ -146,7 +146,7 @@ test('creates validation findings linked to file line and commit', () => {
     file: 'src/extension.ts',
     line: 8,
     commit: 'abc123',
-    responsible: 'Developer',
+    responsible: 'Reviewer',
     id: 'finding-1'
   });
 
@@ -166,7 +166,7 @@ test('registers correction attempts and keeps them linked to original finding', 
       file: 'src/extension.ts',
       line: 12,
       commit: 'abc123',
-      responsible: 'Developer',
+      responsible: 'Reviewer',
       id: 'finding-1'
     }
   );
@@ -192,7 +192,7 @@ test('revalidates and reopens findings preserving status history', () => {
       file: 'src/extension.ts',
       line: 20,
       commit: 'abc123',
-      responsible: 'Developer',
+      responsible: 'Reviewer',
       id: 'finding-1'
     }
   );
@@ -260,7 +260,7 @@ test('blocks merge when critical or high findings are pending', () => {
       file: 'src/extension.ts',
       line: 1,
       commit: 'abc123',
-      responsible: 'Developer'
+      responsible: 'Reviewer',
     }
   );
   const updated = updateMergeDecision(session);
