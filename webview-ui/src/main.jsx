@@ -49,16 +49,19 @@ const colors = {
 function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
   const session = state?.currentSession;
   const git = state?.git;
+  const navBadges = buildNavigationBadges(state);
+  const ruleGroups = buildRuleGroups(state);
+  const sessionProgress = calculateSessionProgress(state);
   const nav = [
-    ['dashboard', Home, 'Dashboard', '82'],
-    ['analysis', AlertTriangle, 'Diagnósticos', '25'],
-    ['intelligence', Lightbulb, 'Inteligência', state?.intelligence?.suggestions?.length ? String(state.intelligence.suggestions.length) : ''],
-    ['comments', MessageSquare, 'Comentários', session?.comments?.length ? String(session.comments.length) : ''],
-    ['collaboration', GitPullRequest, 'Colaboração', session?.notifications?.filter((item) => !item.read).length ? String(session.notifications.filter((item) => !item.read).length) : ''],
-    ['git-review', GitCommit, 'Git Review', git?.changedFiles?.length ? String(git.changedFiles.length) : ''],
-    ['conformities', CheckCircle2, 'Conformidades', '68'],
-    ['telemetry', BarChart3, 'Telemetria', '94%'],
-    ['history', Clock3, 'Histórico', '12'],
+    ['dashboard', Home, 'Dashboard', navBadges.dashboard],
+    ['analysis', AlertTriangle, 'Diagnósticos', navBadges.analysis],
+    ['intelligence', Lightbulb, 'Inteligência', navBadges.intelligence],
+    ['comments', MessageSquare, 'Comentários', navBadges.comments],
+    ['collaboration', GitPullRequest, 'Colaboração', navBadges.collaboration],
+    ['git-review', GitCommit, 'Git Review', navBadges.gitReview],
+    ['conformities', CheckCircle2, 'Conformidades', navBadges.conformities],
+    ['telemetry', BarChart3, 'Telemetria', navBadges.telemetry],
+    ['history', Clock3, 'Histórico', navBadges.history],
     ['settings', Settings, 'Configurações', '']
   ];
 
@@ -84,7 +87,7 @@ function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
       <section className="review-state">
         <span>Revisão atual</span>
         <strong>{session ? `${session.sourceBranch} · ${session.status}` : `${git?.currentBranch ?? 'sem branch'} · sem sessão`}</strong>
-        <div className="progress"><i style={{ width: session ? '82%' : '18%' }} /></div>
+        <div className="progress"><i style={{ width: `${sessionProgress}%` }} /></div>
       </section>
 
       <nav className="nav-list">
@@ -104,14 +107,89 @@ function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
 
       <section className="rule-groups" data-tour="rule-groups">
         <h4>Categorias</h4>
-        <RuleItem color="red" label="SOLID" count="3" />
-        <RuleItem color="red" label="Clean Architecture" count="4" />
-        <RuleItem color="yellow" label="DDD" count="2" />
-        <RuleItem color="blue" label="Performance" count="1" />
-        <RuleItem color="green" label="Testes" count="18" />
+        {ruleGroups.map((item) => (
+          <RuleItem key={item.label} color={item.color} label={item.label} count={String(item.count)} />
+        ))}
       </section>
     </aside>
   );
+}
+
+function buildNavigationBadges(state) {
+  const session = state?.currentSession;
+  const comments = session?.comments ?? [];
+  const findings = session?.findings ?? [];
+  const metrics = state?.metrics ?? {};
+  const openComments = comments.filter((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? '')).length;
+  const openFindings = findings.filter((finding) => finding.status !== 'APPROVED').length;
+  const unreadNotifications = (session?.notifications ?? []).filter((item) => !item.read).length;
+  const suggestions = state?.intelligence?.suggestions?.length ?? 0;
+  const qualityScore = metrics.qualityScore ?? calculateLocalQualityScore(comments, findings);
+  const conformityScore = calculateConformityScore(session);
+
+  return {
+    dashboard: `${qualityScore}`,
+    analysis: openFindings + openComments ? String(openFindings + openComments) : '',
+    intelligence: suggestions ? String(suggestions) : '',
+    comments: comments.length ? String(comments.length) : '',
+    collaboration: unreadNotifications ? String(unreadNotifications) : '',
+    gitReview: state?.git?.changedFiles?.length ? String(state.git.changedFiles.length) : '',
+    conformities: `${conformityScore}%`,
+    telemetry: `${qualityScore}%`,
+    history: state?.sessions?.length ? String(state.sessions.length) : ''
+  };
+}
+
+function buildRuleGroups(state) {
+  const findings = state?.currentSession?.findings ?? [];
+  const byRule = (label) => findings.filter((finding) => `${finding.rule} ${finding.description ?? ''}`.toLowerCase().includes(label.toLowerCase())).length;
+  const testsFailed = state?.vscode?.tests?.failed ?? state?.vscode?.testFailures?.length ?? 0;
+
+  return [
+    { color: 'red', label: 'SOLID', count: byRule('solid') + byRule('srp') + byRule('ocp') + byRule('lsp') + byRule('isp') + byRule('dip') },
+    { color: 'red', label: 'Clean Architecture', count: byRule('clean architecture') + byRule('camada') + byRule('dependência') },
+    { color: 'yellow', label: 'DDD', count: byRule('ddd') + byRule('bounded') + byRule('entidade') },
+    { color: 'blue', label: 'Performance', count: state?.performance?.cacheEnabled ? 1 : 0 },
+    { color: 'green', label: 'Testes', count: testsFailed }
+  ];
+}
+
+function calculateSessionProgress(state) {
+  const session = state?.currentSession;
+  if (!session) return state?.git?.currentBranch ? 18 : 0;
+  if (session.status === 'APPROVED') return 100;
+
+  const comments = session.comments ?? [];
+  const findings = session.findings ?? [];
+  const total = comments.length + findings.length;
+  if (!total) return 55;
+
+  const done = comments.filter((comment) => ['RESOLVED', 'APPROVED'].includes(comment.status ?? '')).length
+    + findings.filter((finding) => finding.status === 'APPROVED').length;
+  return Math.max(20, Math.min(98, Math.round((done / total) * 100)));
+}
+
+function calculateConformityScore(session) {
+  if (!session) return 0;
+  const comments = session.comments ?? [];
+  const findings = session.findings ?? [];
+  const total = comments.length + findings.length;
+  if (!total) return session.status === 'APPROVED' ? 100 : 0;
+  const resolved = comments.filter((comment) => ['RESOLVED', 'APPROVED'].includes(comment.status ?? '')).length
+    + findings.filter((finding) => finding.status === 'APPROVED').length;
+  return Math.round((resolved / total) * 100);
+}
+
+function calculateLocalQualityScore(comments, findings) {
+  const weights = { LOW: 3, MEDIUM: 7, HIGH: 12, CRITICAL: 20 };
+  const commentPenalty = comments
+    .filter((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? ''))
+    .reduce((total, comment) => total + (weights[comment.severity ?? 'MEDIUM'] ?? 7), 0);
+  const findingPenalty = findings
+    .filter((finding) => finding.status !== 'APPROVED')
+    .reduce((total, finding) => total + (weights[finding.severity ?? 'MEDIUM'] ?? 7), 0);
+
+  return Math.max(0, 100 - commentPenalty - findingPenalty);
 }
 
 function RuleItem({ color, label, count }) {
@@ -791,44 +869,155 @@ function IntelligencePanel({ intelligence }) {
 
 function CollaborationPanel({ session }) {
   const [message, setMessage] = useState('Pode validar este módulo @dev?');
-  const firstFile = session?.changedFiles?.[0] ?? 'src/extension.ts';
-  const moduleName = firstFile.split('/').slice(0, 2).join('/') || firstFile;
+  const [mention, setMention] = useState(session?.author ?? 'dev');
+  const [threadTarget, setThreadTarget] = useState(session?.comments?.[0]?.threadId ?? 'review-geral');
+  const firstFile = session?.changedFiles?.[0] ?? '';
+  const moduleName = firstFile ? firstFile.split('/').slice(0, 2).join('/') || firstFile : 'módulo atual';
+  const comments = session?.comments ?? [];
+  const findings = session?.findings ?? [];
+  const messages = session?.collaborationMessages ?? [];
+  const notifications = session?.notifications ?? [];
+  const participants = buildCollaborationParticipants(session);
+  const pendingByPerson = buildPendingByPerson(session);
+  const waitingDev = comments.filter((comment) => ['OPEN', 'NEEDS_CHANGES'].includes(comment.status ?? 'NEEDS_CHANGES')).length + findings.filter((finding) => ['NEEDS_CHANGES', 'REOPENED'].includes(finding.status ?? 'NEEDS_CHANGES')).length;
+  const waitingReviewer = comments.filter((comment) => comment.status === 'RESOLVED').length + findings.filter((finding) => finding.status === 'FIXED').length;
+  const blocked = Boolean(session?.mergeDecision?.blocked) || comments.some((comment) => comment.severity === 'CRITICAL' && !['RESOLVED', 'APPROVED'].includes(comment.status ?? ''));
+  const workflowState = blocked ? 'BLOQUEADO' : waitingDev > 0 ? 'AGUARDANDO DEV' : waitingReviewer > 0 ? 'AGUARDANDO REVIEWER' : 'PRONTO PARA APROVAÇÃO';
+  const threadOptions = Array.from(new Set(['review-geral', ...comments.map((comment) => comment.threadId || `${comment.file}:${comment.line}`), ...messages.map((item) => item.threadId)])).filter(Boolean);
+  const selectedThreadMessages = messages.filter((item) => (item.threadId || item.id) === threadTarget);
+  const assigneeOptions = Array.from(new Set([session?.author, session?.reviewer, 'dev', 'reviewer', ...comments.map((comment) => comment.author)])).filter(Boolean);
+
+  useEffect(() => {
+    if (session?.author && mention === 'dev') setMention(session.author);
+  }, [session?.author]);
 
   const sendMessage = () => {
     if (!session || !message.trim()) return;
-    vscodeApi?.postMessage({ type: 'addCollaborationMessage', payload: { id: session.id, body: message } });
+    const body = message.includes('@') ? message : `@${mention} ${message}`;
+    vscodeApi?.postMessage({ type: 'addCollaborationMessage', payload: { id: session.id, body, threadId: threadTarget } });
     setMessage('');
   };
 
   return (
-    <section className="sessions-panel">
+    <section className="sessions-panel collaboration-workspace">
       <div className="section-title">
         <div>
           <h2>Colaboração</h2>
-          <p className="muted">Threads, menções, notificações e aprovações parciais.</p>
+          <p className="muted">Central operacional do fluxo humano: papéis, responsáveis, pendências, threads, menções, aprovações e bloqueios.</p>
         </div>
-        <span className={session?.mergeDecision?.blocked ? 'merge blocked' : 'merge'}>{session?.mergeDecision?.blocked ? 'Merge bloqueado' : 'Merge liberado'}</span>
+        <span className={blocked ? 'merge blocked' : 'merge'}>{workflowState}</span>
       </div>
-      <div className="collab-form">
-        <input value={message} onChange={(event) => setMessage(event.target.value)} />
-        <button disabled={!session || !message.trim()} onClick={sendMessage}><MessageSquare size={16} /> Enviar</button>
-      </div>
-      <div className="workflow-actions">
-        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
-        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
-        <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
-      </div>
-      <div className="collab-grid">
-        <TextListPanel title="Threads colaborativas" items={(session?.collaborationMessages ?? []).map((item) => `${item.author}: ${item.body}`)} />
-        <TextListPanel title="Notificações" items={(session?.notifications ?? []).map((item) => `@${item.recipient}: ${item.message}`)} />
-        <TextListPanel title="Histórico compartilhado" items={(session?.history ?? []).slice(-5).map((item) => item.message)} />
-      </div>
-      <div className="badge-row">
-        {(session?.partialApprovals ?? []).map((approval) => <Badge key={approval.id}>{approval.scope}: {approval.target}</Badge>)}
-        {(session?.mergeDecision?.reasons ?? []).map((reason) => <Badge key={reason}>{reason}</Badge>)}
-      </div>
+
+      <section className="collaboration-status-grid">
+        <SummaryCard title="Aguardando dev" value={String(waitingDev)} label="correções pendentes" color={waitingDev ? 'yellow' : 'green'} />
+        <SummaryCard title="Aguardando reviewer" value={String(waitingReviewer)} label="validações pendentes" color={waitingReviewer ? 'blue' : 'green'} />
+        <SummaryCard title="Bloqueios" value={String(session?.mergeDecision?.reasons?.length ?? (blocked ? 1 : 0))} label="impedem merge" color={blocked ? 'red' : 'green'} />
+        <SummaryCard title="Notificações" value={String(notifications.filter((item) => !item.read).length)} label="menções não lidas" color="blue" />
+      </section>
+
+      <section className="collaboration-layout">
+        <aside className="collaboration-side">
+          <section className="sessions-panel nested-panel">
+            <div className="section-title"><h2>Papéis da revisão</h2></div>
+            <div className="participant-list">
+              {participants.map((person) => (
+                <article key={`${person.role}-${person.name}`} className="participant-card">
+                  <strong>{person.name}</strong>
+                  <span>{person.role}</span>
+                  <Badge>{person.state}</Badge>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="sessions-panel nested-panel">
+            <div className="section-title"><h2>Pendências por pessoa</h2></div>
+            <div className="ownership-list">
+              {pendingByPerson.length ? pendingByPerson.map((item) => (
+                <article key={item.name} className="ownership-card">
+                  <div><strong>{item.name}</strong><span>{item.role}</span></div>
+                  <b>{item.count}</b>
+                  <small>{item.description}</small>
+                </article>
+              )) : <p className="empty-state">Sem pendências atribuídas.</p>}
+            </div>
+          </section>
+        </aside>
+
+        <section className="collaboration-main">
+          <div className="collab-form collaboration-message-form">
+            <select value={threadTarget} onChange={(event) => setThreadTarget(event.target.value)} aria-label="Thread alvo">
+              {threadOptions.map((thread) => <option key={thread} value={thread}>{thread}</option>)}
+            </select>
+            <select value={mention} onChange={(event) => setMention(event.target.value)} aria-label="Pessoa mencionada">
+              {assigneeOptions.map((person) => <option key={person} value={person}>{person}</option>)}
+            </select>
+            <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Mensagem com @menção" />
+            <button disabled={!session || !message.trim()} onClick={sendMessage}><MessageSquare size={16} /> Enviar</button>
+          </div>
+
+          <div className="workflow-actions collaboration-actions">
+            <button disabled={!session || !firstFile} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
+            <button disabled={!session || !firstFile} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
+            <button disabled={!session} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
+          </div>
+
+          <section className="sessions-panel nested-panel">
+            <div className="section-title"><h2>Threads e respostas</h2><Badge>{threadTarget}</Badge></div>
+            <div className="thread-board">
+              {comments.filter((comment) => (comment.threadId || `${comment.file}:${comment.line}`) === threadTarget).map((comment) => (
+                <article key={comment.id} className="thread-message reviewer-message">
+                  <strong>{comment.author || 'reviewer'}</strong>
+                  <span>{comment.file}:{comment.line} · {comment.severity} · {comment.status}</span>
+                  <p>{comment.body}</p>
+                </article>
+              ))}
+              {selectedThreadMessages.length ? selectedThreadMessages.map((item) => (
+                <article key={item.id} className="thread-message">
+                  <strong>{item.author}</strong>
+                  <span>{item.mentions?.length ? `menciona ${item.mentions.map((m) => `@${m}`).join(', ')}` : 'mensagem geral'}</span>
+                  <p>{item.body}</p>
+                </article>
+              )) : <p className="empty-state">Sem respostas colaborativas nessa thread.</p>}
+            </div>
+          </section>
+        </section>
+      </section>
+
+      <section className="collab-grid collaboration-evidence-grid">
+        <TextListPanel title="Comentários aguardando resposta" items={comments.filter((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? '')).map((comment) => `${comment.file}:${comment.line} · ${comment.status} · responsável: ${session?.author ?? 'dev'}`)} />
+        <TextListPanel title="Bloqueios de merge" items={(session?.mergeDecision?.reasons ?? []).length ? session.mergeDecision.reasons : (blocked ? ['Comentário crítico aberto ou validação pendente.'] : [])} />
+        <TextListPanel title="Aprovações parciais" items={(session?.partialApprovals ?? []).map((approval) => `${approval.reviewer} aprovou ${approval.scope}: ${approval.target}`)} />
+      </section>
     </section>
   );
+}
+
+function buildCollaborationParticipants(session) {
+  if (!session) return [];
+  const reviewer = session.reviewer || 'reviewer';
+  const author = session.author || 'dev';
+  const mentioned = Array.from(new Set((session.notifications ?? []).map((item) => item.recipient))).filter((name) => ![reviewer, author].includes(name));
+  return [
+    { name: reviewer, role: 'Reviewer', state: session.mergeDecision?.blocked ? 'validando bloqueios' : 'apto a aprovar' },
+    { name: author, role: 'Developer', state: (session.comments ?? []).some((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? '')) ? 'corrigir pendências' : 'sem pendências' },
+    ...mentioned.map((name) => ({ name, role: 'Mencionado', state: 'aguardando resposta' }))
+  ];
+}
+
+function buildPendingByPerson(session) {
+  if (!session) return [];
+  const rows = [];
+  const author = session.author || 'dev';
+  const reviewer = session.reviewer || 'reviewer';
+  const devPending = (session.comments ?? []).filter((comment) => ['OPEN', 'NEEDS_CHANGES'].includes(comment.status ?? 'NEEDS_CHANGES')).length
+    + (session.findings ?? []).filter((finding) => ['NEEDS_CHANGES', 'REOPENED'].includes(finding.status ?? 'NEEDS_CHANGES')).length;
+  const reviewerPending = (session.comments ?? []).filter((comment) => comment.status === 'RESOLVED').length
+    + (session.findings ?? []).filter((finding) => finding.status === 'FIXED').length;
+  if (devPending) rows.push({ name: author, role: 'Developer', count: devPending, description: 'itens aguardando correção ou resposta' });
+  if (reviewerPending) rows.push({ name: reviewer, role: 'Reviewer', count: reviewerPending, description: 'itens aguardando revalidação' });
+  (session.notifications ?? []).filter((item) => !item.read).forEach((item) => rows.push({ name: item.recipient, role: 'Mencionado', count: 1, description: item.message }));
+  return rows;
 }
 
 

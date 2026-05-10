@@ -90,10 +90,10 @@ Os objetivos principais são:
 
 ## Estratégias
 
-* Zustand;
+* hooks React locais;
 * memoization;
-* selectors;
-* shallow compare.
+* estado derivado granular;
+* renderização incremental.
 
 ---
 
@@ -148,8 +148,7 @@ Os objetivos principais são:
 
 ## Estratégias
 
-* SQLite indexado;
-* IndexedDB;
+* JSON local versionado;
 * cache em memória;
 * batch updates.
 

@@ -6,7 +6,7 @@
 
 **Objetivo:** reduzir carga cognitiva do reviewer, padronizar validacoes tecnicas, registrar historico de correcoes e revalidacoes, e fornecer metricas de qualidade arquitetural.
 
-**Stack alvo:** VS Code Extension Host, TypeScript, React, Material Design 3, shadcn/ui, Zustand, Git integration, SQLite/local database, cache local e analytics/telemetria.
+**Stack alvo:** VS Code Extension Host em TypeScript, Webview React em JavaScript/JSX, Material Design 3 com componentes próprios, hooks React para estado local, Git integration, banco local JSON versionado, cache local e analytics/telemetria.
 
 ## 2. Entidades de Negocio Core
 
@@ -73,7 +73,7 @@ Camadas principais:
 - `src/presentation/`: React webview, Material Design 3, navegacao, feedback visual e comunicacao com o extension host.
 - `src/application/`: casos de uso, orquestracao de fluxo, abertura de review, registro de finding, revalidacao e sincronizacao de telemetria.
 - `src/domain/`: entidades, regras de negocio, validacoes e invariantes sem dependencia de UI, VS Code ou persistencia.
-- `src/infrastructure/`: VS Code API, Git, SQLite/local database, cache, analytics e comunicacao externa.
+- `src/infrastructure/`: VS Code API, Git, banco local JSON versionado, cache, analytics e comunicacao externa.
 - `src/shared/`: contratos, utilitarios e tipos compartilhados.
 - `src/telemetry/`: eventos, metricas e processamento analitico desacoplado.
 

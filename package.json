@@ -124,7 +124,7 @@
     "test": "node --test test/*.test.mjs",
     "package": "npm run compile && npx @vscode/vsce package --no-dependencies",
     "install:webview": "npm --prefix webview-ui install",
-    "clean": "rm -rf dist webview-ui/dist node_modules webview-ui/node_modules package-lock.json webview-ui/package-lock.json"
+    "clean": "rm -rf dist webview-ui/dist node_modules webview-ui/node_modules"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

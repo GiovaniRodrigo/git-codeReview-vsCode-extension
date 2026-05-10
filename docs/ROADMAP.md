@@ -433,10 +433,11 @@ Expandir ecossistema.
 ## Frontend
 
 * React
-* TypeScript
+* JavaScript/JSX na Webview
+* TypeScript no Extension Host
 * Material Design 3
-* shadcn/ui
-* Zustand
+* componentes React próprios
+* hooks React para estado local
 
 ---
 
@@ -449,8 +450,9 @@ Expandir ecossistema.
 
 ## Persistência
 
-* SQLite
-* IndexedDB
+* JSON local versionado no `globalStorage`
+* backup local
+* sincronização remota simulada
 
 ---
 

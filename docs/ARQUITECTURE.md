@@ -86,10 +86,11 @@ Responsável por:
 ## Tecnologias
 
 * React;
-* TypeScript;
+* JavaScript/JSX na Webview;
+* TypeScript no Extension Host;
 * Material Design 3;
-* shadcn/ui;
-* Zustand.
+* componentes React próprios;
+* estado local com hooks React.
 
 ---
 
@@ -174,7 +175,7 @@ Responsável por:
 
 * leitura de diffs;
 * acesso ao Git;
-* persistência SQLite;
+* persistência local em JSON versionado no `globalStorage` da extensão;
 * cache;
 * analytics;
 * comunicação entre webview e extension host.
@@ -320,10 +321,11 @@ O sistema deve utilizar eventos para:
 
 # 10.1 Banco Local
 
-Tecnologias planejadas:
+Tecnologia implementada:
 
-* SQLite;
-* IndexedDB.
+* arquivo JSON local versionado no `globalStorage` da extensão;
+* backup local timestampado;
+* sincronização remota simulada para arquivo configurável.
 
 ---
 
@@ -533,7 +535,8 @@ presentation/
 
 Ferramenta:
 
-* Zustand.
+* hooks React locais;
+* estado derivado do `DashboardState` enviado pelo Extension Host.
 
 ---
 
@@ -577,10 +580,10 @@ Ferramenta:
 | Arquitetura     | Clean Architecture |
 | UI              | Material Design 3  |
 | Componentização | Atomic Design      |
-| Estado          | Zustand            |
-| Persistência    | SQLite + IndexedDB |
+| Estado          | Hooks React + DashboardState |
+| Persistência    | JSON local versionado |
 | Integração      | Git + VS Code      |
 | Comunicação     | Event Driven       |
 | Organização     | Modular            |
-| Linguagem       | TypeScript         |
+| Linguagem       | TypeScript no Extension Host; JavaScript/JSX na Webview |
 | Frontend        | React              |
