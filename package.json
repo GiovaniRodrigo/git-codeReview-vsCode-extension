@@ -2,7 +2,7 @@
   "name": "git-code-review",
   "displayName": "Code Review Design Extension",
   "description": "Professional VS Code extension for architectural code review, PR analysis, and engineering telemetry with Material Design 3.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "CodeReviewExtension",
   "private": false,
   "license": "MIT",

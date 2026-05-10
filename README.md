@@ -2,7 +2,7 @@
 
 Professional VS Code extension for architectural code review, Pull Request analysis, and engineering telemetry with Material Design 3.
 
-![Dashboard Preview](./media/prints/dashboard.png)
+![Dashboard Preview](https://github.com/GiovaniRodrigo/git-codeReview-vsCode-extension/raw/main/media/prints/dashboard.png)
 
 ## Features
 
@@ -14,7 +14,7 @@ Professional VS Code extension for architectural code review, Pull Request analy
 - **Audit & Persistence**: Versioned local database with NDJSON audit logs.
 - **Onboarding**: Interactive guided tour for new users.
 
-![Diagnostics Preview](./media/prints/diagnostics.png)
+![Diagnostics Preview](https://github.com/GiovaniRodrigo/git-codeReview-vsCode-extension/raw/main/media/prints/diagnostics.png)
 
 ## Getting Started
 
