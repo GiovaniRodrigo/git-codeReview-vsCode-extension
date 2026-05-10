@@ -162,7 +162,7 @@ function isReviewSessionStatus(value) {
 function isReviewCommentStatus(value) {
   return REVIEW_COMMENT_STATUSES.includes(value);
 }
-function isReviewer2(session, user) {
+function isReviewer(session, user) {
   return session.reviewer === user || user === "admin";
 }
 function isAuthor(session, user) {
@@ -247,7 +247,7 @@ function addCollaborationMessage(session, input) {
 function registerPartialApproval(session, input) {
   if (!input.target.trim()) throw new Error("O alvo da aprovacao parcial e obrigatorio.");
   if (!input.reviewer.trim()) throw new Error("O reviewer da aprovacao parcial e obrigatorio.");
-  if (!isReviewer2(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar aprovacoes parciais.");
+  if (!isReviewer(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar aprovacoes parciais.");
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const approvals = session.partialApprovals ?? [];
   const approval = {
@@ -294,7 +294,7 @@ function isValidationSeverity(value) {
 }
 function createValidationFinding(session, input) {
   validateFindingInput(input);
-  if (!isReviewer2(session, input.responsible)) throw new Error("Apenas o reviewer oficial ou admin pode registrar novos findings.");
+  if (!isReviewer(session, input.responsible)) throw new Error("Apenas o reviewer oficial ou admin pode registrar novos findings.");
   const findings = session.findings ?? [];
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const id = input.id ?? `${session.id}-finding-${findings.length + 1}`;
@@ -325,7 +325,7 @@ function createValidationFinding(session, input) {
 function updateValidationFindingStatus(session, findingId, status, user, reason = "", now = /* @__PURE__ */ new Date()) {
   const { finding: finding2, findings } = findFinding(session, findingId);
   const updatedAt = now.toISOString();
-  if (status === "APPROVED" && !isReviewer2(session, user)) {
+  if (status === "APPROVED" && !isReviewer(session, user)) {
     throw new Error("Apenas o reviewer oficial ou admin pode aprovar um finding.");
   }
   return {
@@ -370,7 +370,7 @@ function registerCorrectionAttempt(session, findingId, input) {
 function revalidateFinding(session, findingId, input) {
   if (!input.reviewer.trim()) throw new Error("O reviewer da revalidacao e obrigatorio.");
   if (!input.notes.trim()) throw new Error("As notas da revalidacao sao obrigatorias.");
-  if (!isReviewer2(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar revalidacoes.");
+  if (!isReviewer(session, input.reviewer)) throw new Error("Apenas o reviewer oficial ou admin pode realizar revalidacoes.");
   const { finding: finding2, findings } = findFinding(session, findingId);
   const createdAt = (input.now ?? /* @__PURE__ */ new Date()).toISOString();
   const revalidation = {
@@ -446,7 +446,7 @@ function updateReviewCommentStatus(session, commentId, status, user, now = /* @_
   if (!existing) {
     throw new Error(`Comentario nao encontrado: ${commentId}`);
   }
-  if (status === "APPROVED" && !isReviewer2(session, user)) {
+  if (status === "APPROVED" && !isReviewer(session, user)) {
     throw new Error("Apenas o reviewer oficial ou admin pode aprovar um comentario.");
   }
   const updatedAt = now.toISOString();
@@ -595,7 +595,7 @@ function updateReviewSessionStatus(session, status, user, now = /* @__PURE__ */ 
   if (session.status === status) {
     return session;
   }
-  if (status === "APPROVED" && !isReviewer2(session, user)) {
+  if (status === "APPROVED" && !isReviewer(session, user)) {
     throw new Error("Apenas o reviewer oficial ou admin pode aprovar a review session.");
   }
   const updatedAt = now.toISOString();
@@ -1099,6 +1099,303 @@ function buildCorrelationText(file, comments, findings, openComments, criticalSi
   return `${file} concentra findings autom\xE1ticos sem coment\xE1rios vinculados ainda.`;
 }
 
+// src/shared/locales/en.ts
+var en = {
+  dashboard: {
+    title: "Review Executive View",
+    subtitle: "Consolidated summary of score, status, comments, and general session health.",
+    hero: {
+      scoreLabel: "Score based on comments",
+      description: "The score consolidates public comments, severity, resolved items, VS Code problems, and test failures.",
+      statusPR: "Session/PR Status",
+      openComments: "Open Comments",
+      changedFiles: "Changed Files"
+    },
+    summary: {
+      score: "Score",
+      quality: "general quality",
+      status: "Status",
+      decision: "current decision",
+      comments: "Comments",
+      open: "open",
+      blocks: "Blocks",
+      problemsTests: "Problems + tests"
+    },
+    timeline: "Session Summary",
+    timelineDesc: "This area does not replace Diagnostics. It only shows the general state for decision making.",
+    nextActions: "Next Actions",
+    updateContext: "Update Context",
+    exportReport: "Export Report",
+    runReview: "Run Review"
+  },
+  diagnostics: {
+    title: "Technical Issues Found",
+    subtitle: "Errors, warnings, tests, findings, and comments linked to file/line for operational correction.",
+    summary: {
+      findings: "Findings",
+      technicalItems: "technical items",
+      problems: "Problems",
+      vscode: "VS Code",
+      tests: "Tests",
+      failing: "failing",
+      files: "Files",
+      changed: "changed"
+    },
+    table: {
+      title: "Files, lines and violations",
+      subtitle: "Use this screen to find the cause of the problem, open file/diff and associate comments with the correct snippet."
+    },
+    commentsTitle: "Technical comments"
+  },
+  navigation: {
+    title: "Navigation",
+    subtitle: "Session shortcuts for commits, diffs, files, comments, and validations.",
+    tabs: {
+      changes: "Changes",
+      activity: "Activity",
+      quality: "Quality"
+    },
+    labels: {
+      dashboard: "Dashboard",
+      analysis: "Diagnostics",
+      intelligence: "Intelligence",
+      comments: "Comments",
+      collaboration: "Collaboration",
+      conformities: "Conformities",
+      telemetry: "Telemetry",
+      history: "History",
+      settings: "Settings",
+      commit: "Commit",
+      diff: "Diff",
+      file: "File",
+      comment: "Comment",
+      validation: "Validation"
+    }
+  },
+  collaboration: {
+    title: "Reviewer/Developer Flow",
+    subtitle: "Communication, partial approvals, and merge blocking.",
+    workflowState: {
+      blocked: "BLOCKED",
+      waitingDev: "WAITING DEV",
+      waitingReviewer: "WAITING REVIEWER",
+      ready: "READY FOR APPROVAL"
+    },
+    summary: {
+      waitingDev: "Waiting dev",
+      pendingCorrections: "pending corrections",
+      waitingReviewer: "Waiting reviewer",
+      pendingValidations: "pending validations",
+      blocks: "Blocks",
+      preventMerge: "prevent merge",
+      notifications: "Notifications",
+      unreadMentions: "unread mentions"
+    },
+    roles: "Review Roles",
+    pendingByPerson: "Pending by person",
+    threads: "Threads and replies",
+    approveFile: "Approve file",
+    approveModule: "Approve module",
+    updateBlock: "Update block"
+  },
+  settings: {
+    title: "Operational Settings",
+    subtitle: "Local database, backup, remote sync, cache, lazy loading, and future adapters.",
+    actions: {
+      localDatabase: "Local DB",
+      backup: "Backup",
+      removeSession: "Remove session",
+      syncRemote: "Remote Sync"
+    },
+    summary: {
+      cache: "Cache",
+      lazyLoading: "Lazy loading",
+      batch: "Batch",
+      async: "Async"
+    },
+    integrations: {
+      title: "Prepared Integrations",
+      subtitle: "Adapters ready for configuration without coupling credentials to the extension core."
+    }
+  },
+  common: {
+    update: "Update",
+    refresh: "Refresh",
+    revalidate: "Revalidate",
+    create: "Create",
+    save: "Save",
+    cancel: "Cancel",
+    delete: "Delete",
+    loading: "Loading...",
+    noData: "No data available.",
+    reviewer: "Reviewer",
+    developer: "Developer",
+    admin: "Admin",
+    status: {
+      open: "OPEN",
+      inReview: "IN REVIEW",
+      needsChanges: "NEEDS CHANGES",
+      fixed: "FIXED",
+      approved: "APPROVED",
+      reopened: "REOPENED",
+      resolved: "RESOLVED"
+    }
+  }
+};
+
+// src/shared/locales/pt-br.ts
+var ptBr = {
+  dashboard: {
+    title: "Vis\xE3o Executiva do Review",
+    subtitle: "Resumo consolidado de score, status, coment\xE1rios e sa\xFAde geral da sess\xE3o.",
+    hero: {
+      scoreLabel: "Score baseado em coment\xE1rios",
+      description: "O score consolida coment\xE1rios p\xFAblicos, severidade, itens resolvidos, problems do VS Code e falhas de testes.",
+      statusPR: "Status da Sess\xE3o/PR",
+      openComments: "Coment\xE1rios Abertos",
+      changedFiles: "Arquivos Alterados"
+    },
+    summary: {
+      score: "Score",
+      quality: "qualidade geral",
+      status: "Status",
+      decision: "decis\xE3o atual",
+      comments: "Coment\xE1rios",
+      open: "abertos",
+      blocks: "Bloqueios",
+      problemsTests: "Problems + testes"
+    },
+    timeline: "Resumo da Sess\xE3o",
+    timelineDesc: "Esta \xE1rea n\xE3o substitui Diagn\xF3sticos. Ela mostra apenas o estado geral para tomada de decis\xE3o.",
+    nextActions: "Pr\xF3ximas A\xE7\xF5es",
+    updateContext: "Atualizar Contexto",
+    exportReport: "Exportar Relat\xF3rio",
+    runReview: "Executar Revis\xE3o"
+  },
+  diagnostics: {
+    title: "Problemas T\xE9cnicos Encontrados",
+    subtitle: "Erros, warnings, testes, findings e coment\xE1rios vinculados a arquivo/linha para corre\xE7\xE3o operacional.",
+    summary: {
+      findings: "Findings",
+      technicalItems: "itens t\xE9cnicos",
+      problems: "Problems",
+      vscode: "VS Code",
+      tests: "Testes",
+      failing: "falhando",
+      files: "Arquivos",
+      changed: "alterados"
+    },
+    table: {
+      title: "Arquivos, linhas e viola\xE7\xF5es",
+      subtitle: "Use esta tela para encontrar a causa do problema, abrir arquivo/diff e associar coment\xE1rios ao trecho correto."
+    },
+    commentsTitle: "Coment\xE1rios t\xE9cnicos"
+  },
+  navigation: {
+    title: "Navega\xE7\xE3o",
+    subtitle: "Atalhos da sess\xE3o para commits, diffs, arquivos, coment\xE1rios e valida\xE7\xF5es.",
+    tabs: {
+      changes: "Altera\xE7\xF5es",
+      activity: "Atividade",
+      quality: "Qualidade"
+    },
+    labels: {
+      dashboard: "Dashboard",
+      analysis: "Diagn\xF3sticos",
+      intelligence: "Intelig\xEAncia",
+      comments: "Coment\xE1rios",
+      collaboration: "Colabora\xE7\xE3o",
+      conformities: "Conformidades",
+      telemetry: "Telemetria",
+      history: "Hist\xF3rico",
+      settings: "Configura\xE7\xF5es",
+      commit: "Commit",
+      diff: "Diff",
+      file: "Arquivo",
+      comment: "Coment\xE1rio",
+      validation: "Valida\xE7\xE3o"
+    }
+  },
+  collaboration: {
+    title: "Fluxo Reviewer/Developer",
+    subtitle: "Comunica\xE7\xE3o, aprova\xE7\xF5es parciais e bloqueio de merge.",
+    workflowState: {
+      blocked: "BLOQUEADO",
+      waitingDev: "AGUARDANDO DEV",
+      waitingReviewer: "AGUARDANDO REVIEWER",
+      ready: "PRONTO PARA APROVA\xC7\xC3O"
+    },
+    summary: {
+      waitingDev: "Aguardando dev",
+      pendingCorrections: "corre\xE7\xF5es pendentes",
+      waitingReviewer: "Aguardando reviewer",
+      pendingValidations: "valida\xE7\xF5es pendentes",
+      blocks: "Bloqueios",
+      preventMerge: "impedem merge",
+      notifications: "Notifica\xE7\xF5es",
+      unreadMentions: "men\xE7\xF5es n\xE3o lidas"
+    },
+    roles: "Pap\xE9is da Revis\xE3o",
+    pendingByPerson: "Pend\xEAncias por pessoa",
+    threads: "Threads e respostas",
+    approveFile: "Aprovar arquivo",
+    approveModule: "Aprovar m\xF3dulo",
+    updateBlock: "Atualizar bloqueio"
+  },
+  settings: {
+    title: "Configura\xE7\xF5es Operacionais",
+    subtitle: "Banco local, backup, sincroniza\xE7\xE3o remota, cache, lazy loading e adaptadores futuros.",
+    actions: {
+      localDatabase: "Banco Local",
+      backup: "Backup",
+      removeSession: "Remover sess\xE3o",
+      syncRemote: "Sincroniza\xE7\xE3o Remota"
+    },
+    summary: {
+      cache: "Cache",
+      lazyLoading: "Lazy loading",
+      batch: "Batch",
+      async: "Async"
+    },
+    integrations: {
+      title: "Integra\xE7\xF5es Preparadas",
+      subtitle: "Adaptadores prontos para configura\xE7\xE3o sem acoplar credenciais ao n\xFAcleo da extens\xE3o."
+    }
+  },
+  common: {
+    update: "Atualizar",
+    refresh: "Recarregar",
+    revalidate: "Revalidar",
+    create: "Criar",
+    save: "Salvar",
+    cancel: "Cancelar",
+    delete: "Excluir",
+    loading: "Carregando...",
+    noData: "Nenhum dado dispon\xEDvel.",
+    reviewer: "Reviewer",
+    developer: "Developer",
+    admin: "Admin",
+    status: {
+      open: "ABERTO",
+      inReview: "EM REVIS\xC3O",
+      needsChanges: "AJUSTE SOLICITADO",
+      fixed: "CORRIGIDO",
+      approved: "APROVADO",
+      reopened: "REABERTO",
+      resolved: "RESOLVIDO"
+    }
+  }
+};
+
+// src/shared/i18n.ts
+function getTranslations(language) {
+  const lang = language.toLowerCase();
+  if (lang.startsWith("pt")) {
+    return ptBr;
+  }
+  return en;
+}
+
 // src/application/reviewSessionService.ts
 var ReviewSessionService = class {
   constructor(repository, gitService, sourceFileProvider, auditService) {
@@ -1108,8 +1405,8 @@ var ReviewSessionService = class {
     this.auditService = auditService;
     this.dashboardCache = new LocalTtlCache(1500);
   }
-  async getDashboardState(user) {
-    const cached = this.dashboardCache.get(`dashboard-${user}`);
+  async getDashboardState(user, language = "en") {
+    const cached = this.dashboardCache.get(`dashboard-${user}-${language}`);
     if (cached) return cached;
     const [currentSession, git2, sessions] = await Promise.all([
       this.repository.getCurrent(),
@@ -1130,9 +1427,10 @@ var ReviewSessionService = class {
         asyncProcessingEnabled: true
       },
       integrations: listIntegrationDescriptors(),
-      currentUser: user
+      currentUser: user,
+      translations: getTranslations(language)
     };
-    this.dashboardCache.set(`dashboard-${user}`, state);
+    this.dashboardCache.set(`dashboard-${user}-${language}`, state);
     return state;
   }
   async startReview(author, reviewer) {
@@ -1641,7 +1939,7 @@ var ReviewPanel = class {
       this.post({ type: "operationCompleted", payload: { message: `Diff aberto: ${message.payload.file}` } });
     }
     if (message.type === "exportReviewReport") {
-      const state = await this.service.getDashboardState(vscode2.env.machineId);
+      const state = await this.service.getDashboardState(vscode2.env.machineId, vscode2.env.language);
       const report = buildMarkdownReport(state);
       const document = await vscode2.workspace.openTextDocument({ content: report, language: "markdown" });
       await vscode2.window.showTextDocument(document, { preview: false });
@@ -1961,17 +2259,18 @@ var ReviewSidebarProvider = class {
     this.viewType = "codeReview.sidebar";
   }
   async resolveWebviewView(webviewView) {
-    const state = await this.service.getDashboardState(vscode3.env.machineId);
+    const state = await this.service.getDashboardState(vscode3.env.machineId, vscode3.env.language);
     const session = state.currentSession;
+    const t = state.translations;
     webviewView.webview.options = { enableScripts: false };
     webviewView.webview.html = `<!doctype html>
 <html lang="pt-BR">
 <body style="font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px;">
   <h2 style="font-size: 16px;">Code Review</h2>
   <p><strong>Branch:</strong> ${escapeHtml(state.git.currentBranch)}</p>
-  <p><strong>Destino:</strong> ${escapeHtml(state.git.baseBranch)}</p>
-  <p><strong>Status:</strong> ${escapeHtml(session?.status ?? "sem sessao")}</p>
-  <p><strong>Arquivos alterados:</strong> ${state.git.changedFiles.length}</p>
+  <p><strong>${escapeHtml(t.dashboard.summary.decision)}:</strong> ${escapeHtml(state.git.baseBranch)}</p>
+  <p><strong>Status:</strong> ${escapeHtml(session?.status ?? t.common.noData)}</p>
+  <p><strong>${escapeHtml(t.dashboard.hero.changedFiles)}:</strong> ${state.git.changedFiles.length}</p>
 </body>
 </html>`;
   }

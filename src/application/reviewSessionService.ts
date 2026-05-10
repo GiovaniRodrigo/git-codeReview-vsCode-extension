@@ -25,12 +25,14 @@ import {
   ValidationSeverity,
   updateReviewSessionGitContext,
   updateReviewSessionStatus,
-  updateMergeDecision
+  updateMergeDecision,
+  isReviewer
 } from '../domain/reviewSession';
 import { calculateReviewMetrics, ReviewMetrics } from '../telemetry/reviewMetrics';
 import { LocalTtlCache } from './performanceCache';
 import { listIntegrationDescriptors, IntegrationDescriptor } from './integrationDescriptors';
 import { AssistedIntelligenceReport, buildAssistedIntelligenceReport } from './assistedIntelligence';
+import { Translations, getTranslations } from '../shared/i18n';
 
 export interface ReviewSessionRepository {
   getCurrent(): Promise<ReviewSession | undefined>;
@@ -72,6 +74,7 @@ export interface DashboardState {
   performance: PerformanceState;
   integrations: IntegrationDescriptor[];
   currentUser: string;
+  translations: Translations;
   vscode?: VSCodeContextState;
 }
 
@@ -90,8 +93,8 @@ export class ReviewSessionService {
     private readonly auditService?: AuditService
   ) {}
 
-  async getDashboardState(user: string): Promise<DashboardState> {
-    const cached = this.dashboardCache.get(`dashboard-${user}`);
+  async getDashboardState(user: string, language = 'en'): Promise<DashboardState> {
+    const cached = this.dashboardCache.get(`dashboard-${user}-${language}`);
     if (cached) return cached;
 
     const [currentSession, git, sessions] = await Promise.all([
@@ -113,10 +116,11 @@ export class ReviewSessionService {
         asyncProcessingEnabled: true
       },
       integrations: listIntegrationDescriptors(),
-      currentUser: user
+      currentUser: user,
+      translations: getTranslations(language)
     };
 
-    this.dashboardCache.set(`dashboard-${user}`, state);
+    this.dashboardCache.set(`dashboard-${user}-${language}`, state);
     return state;
   }
 

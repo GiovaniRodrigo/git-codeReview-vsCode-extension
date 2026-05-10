@@ -46,23 +46,35 @@ const colors = {
   blue: '#3b82f6'
 };
 
+function getT(state) {
+  return (path) => {
+    const keys = path.split('.');
+    let result = state?.translations;
+    for (const key of keys) {
+      result = result?.[key];
+    }
+    return result || path;
+  };
+}
+
 function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
   const session = state?.currentSession;
   const git = state?.git;
+  const t = getT(state);
   const navBadges = buildNavigationBadges(state);
   const ruleGroups = buildRuleGroups(state);
   const sessionProgress = calculateSessionProgress(state);
   const nav = [
-    ['dashboard', Home, 'Dashboard', navBadges.dashboard],
-    ['analysis', AlertTriangle, 'Diagnósticos', navBadges.analysis],
-    ['intelligence', Lightbulb, 'Inteligência', navBadges.intelligence],
-    ['comments', MessageSquare, 'Comentários', navBadges.comments],
-    ['collaboration', GitPullRequest, 'Colaboração', navBadges.collaboration],
+    ['dashboard', Home, t('navigation.labels.dashboard') || 'Dashboard', navBadges.dashboard],
+    ['analysis', AlertTriangle, t('navigation.labels.analysis') || 'Diagnósticos', navBadges.analysis],
+    ['intelligence', Lightbulb, t('navigation.labels.intelligence') || 'Inteligência', navBadges.intelligence],
+    ['comments', MessageSquare, t('navigation.labels.comments') || 'Comentários', navBadges.comments],
+    ['collaboration', GitPullRequest, t('navigation.labels.collaboration') || 'Colaboração', navBadges.collaboration],
     ['git-review', GitCommit, 'Git Review', navBadges.gitReview],
-    ['conformities', CheckCircle2, 'Conformidades', navBadges.conformities],
-    ['telemetry', BarChart3, 'Telemetria', navBadges.telemetry],
-    ['history', Clock3, 'Histórico', navBadges.history],
-    ['settings', Settings, 'Configurações', '']
+    ['conformities', CheckCircle2, t('navigation.labels.conformities') || 'Conformidades', navBadges.conformities],
+    ['telemetry', BarChart3, t('navigation.labels.telemetry') || 'Telemetria', navBadges.telemetry],
+    ['history', Clock3, t('navigation.labels.history') || 'Histórico', navBadges.history],
+    ['settings', Settings, t('navigation.labels.settings') || 'Configurações', '']
   ];
 
   return (
@@ -85,8 +97,8 @@ function ReviewLeftbar({ view, setView, state, onStartTour, onToggle }) {
       </div>
 
       <section className="review-state">
-        <span>Revisão atual</span>
-        <strong>{session ? `${session.sourceBranch} · ${session.status}` : `${git?.currentBranch ?? 'sem branch'} · sem sessão`}</strong>
+        <span>{t('dashboard.timeline') || 'Revisão atual'}</span>
+        <strong>{session ? `${session.sourceBranch} · ${session.status}` : `${git?.currentBranch ?? 'sem branch'} · ${t('common.noData') || 'sem sessão'}`}</strong>
         <div className="progress"><i style={{ width: `${sessionProgress}%` }} /></div>
       </section>
 
@@ -223,18 +235,19 @@ function DashboardCenter({ state, onStartReview }) {
   const git = state?.git ?? {};
   const problemsCount = state?.vscode?.problems?.length ?? 0;
   const failedTests = state?.vscode?.tests?.failed ?? state?.vscode?.testFailures?.length ?? 0;
+  const t = getT(state);
 
   return (
     <main className="center-panel dashboard-only">
       <header className="center-header">
         <div>
           <span className="eyebrow">Dashboard</span>
-          <h1>Visão executiva do review</h1>
-          <p>{git.currentBranch ? `${git.currentBranch} para ${git.baseBranch}` : 'Resumo consolidado de score, status, comentários e saúde geral da sessão.'}</p>
+          <h1>{t('dashboard.title')}</h1>
+          <p>{git.currentBranch ? `${git.currentBranch} ${t('common.update').toLowerCase()} ${git.baseBranch}` : t('dashboard.subtitle')}</p>
         </div>
         <div className="header-actions" data-tour="header-actions">
-          <Tooltip label="Recarregar contexto Git e sessão"><button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button></Tooltip>
-          <Tooltip label="Criar ou atualizar sessão de review"><button className="primary" data-tour="start-review" onClick={onStartReview}><Play size={16} /> Executar revisão</button></Tooltip>
+          <Tooltip label={t('dashboard.updateContext')}><button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> {t('common.update')}</button></Tooltip>
+          <Tooltip label={t('dashboard.runReview')}><button className="primary" data-tour="start-review" onClick={onStartReview}><Play size={16} /> {t('dashboard.runReview')}</button></Tooltip>
         </div>
       </header>
       {!state && <SkeletonPanel />}
@@ -242,35 +255,35 @@ function DashboardCenter({ state, onStartReview }) {
         <div className="hero-score-card">
           <Ring score={metrics.qualityScore ?? 100} />
           <div>
-            <span className="eyebrow">Score baseado em comentários</span>
-            <h2>{qualityLabel(metrics.qualityScore ?? 100)}</h2>
-            <p>O score consolida comentários públicos, severidade, itens resolvidos, problems do VS Code e falhas de testes.</p>
+            <span className="eyebrow">{t('dashboard.hero.scoreLabel')}</span>
+            <h2>{qualityLabel(metrics.qualityScore ?? 100, t)}</h2>
+            <p>{t('dashboard.hero.description')}</p>
           </div>
         </div>
         <div className="hero-status-grid">
-          <div><Sparkles size={18} /><strong>{session?.status ?? 'OPEN'}</strong><span>Status da sessão/PR</span></div>
-          <div><MessageSquare size={18} /><strong>{metrics.openCommentsCount ?? 0}</strong><span>Comentários abertos</span></div>
-          <div><GitPullRequest size={18} /><strong>{git.changedFiles?.length ?? 0}</strong><span>Arquivos alterados</span></div>
+          <div><Sparkles size={18} /><strong>{session?.status ?? t('common.status.open')}</strong><span>{t('dashboard.hero.statusPR')}</span></div>
+          <div><MessageSquare size={18} /><strong>{metrics.openCommentsCount ?? 0}</strong><span>{t('dashboard.hero.openComments')}</span></div>
+          <div><GitPullRequest size={18} /><strong>{git.changedFiles?.length ?? 0}</strong><span>{t('dashboard.hero.changedFiles')}</span></div>
         </div>
       </section>
       <section className="summary-grid">
-        <SummaryCard title="Score" value={`${metrics.qualityScore ?? 100}/100`} label="qualidade geral" color="green" />
-        <SummaryCard title="Status" value={session?.status ?? 'OPEN'} label="decisão atual" color="blue" />
-        <SummaryCard title="Comentários" value={String(metrics.commentsCount ?? 0)} label={`${metrics.openCommentsCount ?? 0} abertos`} color="yellow" />
-        <SummaryCard title="Bloqueios" value={String(problemsCount + failedTests)} label="Problems + testes" color="red" />
+        <SummaryCard title={t('dashboard.summary.score')} value={`${metrics.qualityScore ?? 100}/100`} label={t('dashboard.summary.quality')} color="green" />
+        <SummaryCard title={t('dashboard.summary.status')} value={session?.status ?? t('common.status.open')} label={t('dashboard.summary.decision')} color="blue" />
+        <SummaryCard title={t('dashboard.summary.comments')} value={String(metrics.commentsCount ?? 0)} label={`${metrics.openCommentsCount ?? 0} ${t('dashboard.summary.open')}`} color="yellow" />
+        <SummaryCard title={t('dashboard.summary.blocks')} value={String(problemsCount + failedTests)} label={t('dashboard.summary.problemsTests')} color="red" />
       </section>
       <section className="review-workspace dashboard-focus">
         <div className="workspace-main">
-          <h2>Resumo da sessão</h2>
-          <p className="muted">Esta área não substitui Diagnósticos. Ela mostra apenas o estado geral para tomada de decisão.</p>
-          <Timeline session={session} />
+          <h2>{t('dashboard.timeline')}</h2>
+          <p className="muted">{t('dashboard.timelineDesc')}</p>
+          <Timeline session={session} t={t} />
         </div>
         <aside className="workspace-side">
-          <h3>Próximas ações</h3>
+          <h3>{t('dashboard.nextActions')}</h3>
           <div className="actions vertical">
-            <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={18} /> Atualizar contexto</button>
-            <button onClick={() => vscodeApi?.postMessage({ type: 'exportReviewReport' })}><FileDown size={18} /> Exportar relatório</button>
-            <button className="primary" onClick={onStartReview}><Play size={18} /> Executar revisão</button>
+            <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={18} /> {t('dashboard.updateContext')}</button>
+            <button onClick={() => vscodeApi?.postMessage({ type: 'exportReviewReport' })}><FileDown size={18} /> {t('dashboard.exportReport')}</button>
+            <button className="primary" onClick={onStartReview}><Play size={18} /> {t('dashboard.runReview')}</button>
           </div>
         </aside>
       </section>
@@ -280,37 +293,38 @@ function DashboardCenter({ state, onStartReview }) {
 
 function DiagnosticsCenter({ state, onStartReview }) {
   const session = state?.currentSession;
+  const t = getT(state);
   return (
     <main className="center-panel diagnostics-only">
       <header className="center-header">
         <div>
           <span className="eyebrow">Diagnósticos</span>
-          <h1>Problemas técnicos encontrados</h1>
-          <p>Erros, warnings, testes, findings e comentários vinculados a arquivo/linha para correção operacional.</p>
+          <h1>{t('diagnostics.title')}</h1>
+          <p>{t('diagnostics.subtitle')}</p>
         </div>
         <div className="header-actions">
-          <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> Atualizar</button>
-          <button className="primary" onClick={onStartReview}><Play size={16} /> Revalidar</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'requestState' })}><RefreshCw size={16} /> {t('common.update')}</button>
+          <button className="primary" onClick={onStartReview}><Play size={16} /> {t('common.revalidate')}</button>
         </div>
       </header>
       <section className="summary-grid">
-        <SummaryCard title="Findings" value={String(state?.metrics?.findingsCount ?? session?.comments?.length ?? 0)} label="itens técnicos" color="red" />
-        <SummaryCard title="Problems" value={String(state?.vscode?.problems?.length ?? 0)} label="VS Code" color="yellow" />
-        <SummaryCard title="Testes" value={String(state?.vscode?.tests?.failed ?? 0)} label="falhando" color="red" />
-        <SummaryCard title="Arquivos" value={String(state?.git?.changedFiles?.length ?? 0)} label="alterados" color="blue" />
+        <SummaryCard title={t('diagnostics.summary.findings')} value={String(state?.metrics?.findingsCount ?? session?.comments?.length ?? 0)} label={t('diagnostics.summary.technicalItems')} color="red" />
+        <SummaryCard title={t('diagnostics.summary.problems')} value={String(state?.vscode?.problems?.length ?? 0)} label={t('diagnostics.summary.vscode')} color="yellow" />
+        <SummaryCard title={t('diagnostics.summary.tests')} value={String(state?.vscode?.tests?.failed ?? 0)} label={t('diagnostics.summary.failing')} color="red" />
+        <SummaryCard title={t('diagnostics.summary.files')} value={String(state?.git?.changedFiles?.length ?? 0)} label={t('diagnostics.summary.changed')} color="blue" />
       </section>
       <section className="review-workspace">
         <div className="workspace-main">
-          <h2>Arquivos, linhas e violações</h2>
-          <p className="muted">Use esta tela para encontrar a causa do problema, abrir arquivo/diff e associar comentários ao trecho correto.</p>
-          <div data-tour="findings-table"><FindingsTable changedFiles={state?.git?.changedFiles} /></div>
-          <VSCodeContextPanel vscodeContext={state?.vscode} />
-          <ValidationFindingsPanel session={session} git={state?.git} currentUser={state?.currentUser} />
-          <ArchitectureRulesPanel session={session} />
+          <h2>{t('diagnostics.table.title')}</h2>
+          <p className="muted">{t('diagnostics.table.subtitle')}</p>
+          <div data-tour="findings-table"><FindingsTable changedFiles={state?.git?.changedFiles} t={t} /></div>
+          <VSCodeContextPanel vscodeContext={state?.vscode} t={t} />
+          <ValidationFindingsPanel session={session} git={state?.git} currentUser={state?.currentUser} t={t} />
+          <ArchitectureRulesPanel session={session} t={t} />
         </div>
         <aside className="workspace-side">
-          <h3>Comentários técnicos</h3>
-          <CommentsPanel session={session} currentUser={state?.currentUser} />
+          <h3>{t('diagnostics.commentsTitle')}</h3>
+          <CommentsPanel session={session} currentUser={state?.currentUser} t={t} />
         </aside>
       </section>
     </main>
@@ -321,6 +335,7 @@ function DiagnosticsCenter({ state, onStartReview }) {
 function GitReviewCenter({ state, currentUser }) {
   const session = state?.currentSession;
   const git = state?.git ?? {};
+  const t = getT(state);
   const baseFiles = session?.changedFiles?.length ? session.changedFiles : (git.changedFiles ?? []);
   const commits = session?.commits?.length ? session.commits : (git.commits ?? []);
   const [commitFiles, setCommitFiles] = useState([]);
@@ -523,7 +538,7 @@ function GitReviewCenter({ state, currentUser }) {
           {!session && <p className="empty-state">Crie uma sessão de review antes de comentar.</p>}
           <div className="comments-list compact-comments">
             {(session?.comments ?? []).filter((comment) => comment.file === selectedFile).map((comment) => (
-              <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} />
+              <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} t={t} />
             ))}
             {!(session?.comments ?? []).filter((comment) => comment.file === selectedFile).length && <p className="empty-state">Nenhum comentário para este arquivo.</p>}
           </div>
@@ -557,33 +572,33 @@ function SmartDiffPanel({ changedFiles = [] }) {
   );
 }
 
-function NavigationPanel({ session, git }) {
+function NavigationPanel({ session, git, t }) {
   const [tab, setTab] = useState('changes');
   const firstFile = session?.changedFiles?.[0] ?? git?.changedFiles?.[0] ?? 'src/extension.ts';
   const firstCommit = session?.commits?.[0] ?? git?.commits?.[0] ?? 'HEAD';
   const firstComment = session?.comments?.[0];
   const targets = [
-    ['commit', GitCommit, 'Commit', firstCommit],
-    ['diff', GitPullRequest, 'Diff', firstFile],
-    ['file', FolderOpen, 'Arquivo', firstFile],
-    ['comment', MessageSquare, 'Comentário', firstComment?.id ?? 'sem-comentario'],
-    ['validation', ListChecks, 'Validação', 'validation-preview']
+    ['commit', GitCommit, t('navigation.labels.commit'), firstCommit],
+    ['diff', GitPullRequest, t('navigation.labels.diff'), firstFile],
+    ['file', FolderOpen, t('navigation.labels.file'), firstFile],
+    ['comment', MessageSquare, t('navigation.labels.comment'), firstComment?.id ?? 'sem-comentario'],
+    ['validation', ListChecks, t('navigation.labels.validation'), 'validation-preview']
   ];
 
   return (
     <section className="sessions-panel">
       <div className="section-title">
         <div>
-          <h2>Navegação</h2>
-          <p className="muted">Atalhos da sessão para commits, diffs, arquivos, comentários e validações.</p>
+          <h2>{t('navigation.title')}</h2>
+          <p className="muted">{t('navigation.subtitle')}</p>
         </div>
         {session?.activeNavigation && <span className="active-target">{session.activeNavigation.kind}: {session.activeNavigation.ref}</span>}
       </div>
       <div className="tabs" role="tablist" aria-label="Contexto de navegação">
         {[
-          ['changes', 'Alterações'],
-          ['activity', 'Atividade'],
-          ['quality', 'Qualidade']
+          ['changes', t('navigation.tabs.changes')],
+          ['activity', t('navigation.tabs.activity')],
+          ['quality', t('navigation.tabs.quality')]
         ].map(([key, label]) => (
           <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>
         ))}
@@ -619,7 +634,7 @@ function NavigationPanel({ session, git }) {
   );
 }
 
-function CommentsPanel({ session, currentUser, full = false }) {
+function CommentsPanel({ session, currentUser, t, full = false }) {
   const files = useMemo(() => {
     const fromSession = session?.changedFiles ?? [];
     const fromComments = (session?.comments ?? []).map((comment) => comment.file).filter(Boolean);
@@ -683,7 +698,7 @@ function CommentsPanel({ session, currentUser, full = false }) {
     <section className={full ? 'comments-workspace' : 'sessions-panel'}>
       <div className="section-title">
         <div>
-          <h2>Comentários</h2>
+          <h2>{t('dashboard.summary.comments')}</h2>
           <p className="muted">Central oficial da discussão técnica: arquivo, linha, severidade, status, thread e impacto no score.</p>
         </div>
         {full && <Badge>{comments.length} públicos</Badge>}
@@ -692,7 +707,7 @@ function CommentsPanel({ session, currentUser, full = false }) {
       {full && (
         <section className="comment-impact-grid" aria-label="Impacto dos comentários">
           <SummaryCard title="Impacto no score" value={`-${impact}`} label="penalidade atual" color={impact > 25 ? 'red' : impact > 10 ? 'yellow' : 'green'} />
-          <SummaryCard title="Abertos" value={String(openCount)} label="bloqueiam decisão" color="yellow" />
+          <SummaryCard title={t('dashboard.summary.open')} value={String(openCount)} label="bloqueiam decisão" color="yellow" />
           <SummaryCard title="Críticos" value={String(criticalCount)} label="risco alto" color="red" />
           <SummaryCard title="Resolvidos" value={String(resolvedCount)} label="concluídos" color="green" />
         </section>
@@ -707,7 +722,7 @@ function CommentsPanel({ session, currentUser, full = false }) {
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Status"><option value="OPEN">Aberto</option><option value="NEEDS_CHANGES">Ajuste solicitado</option><option value="RESOLVED">Resolvido</option><option value="APPROVED">Aprovado</option></select>
         <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Comentário técnico público" />
         <Tooltip label="Adicionar comentário público vinculado ao arquivo e linha">
-          <button disabled={!session || !selectedFile || !draft.trim()} onClick={addComment}><MessageSquare size={16} /> Inserir</button>
+          <button disabled={!session || !selectedFile || !draft.trim()} onClick={addComment}><MessageSquare size={16} /> {t('common.create')}</button>
         </Tooltip>
       </div>
 
@@ -739,7 +754,7 @@ function CommentsPanel({ session, currentUser, full = false }) {
         {Object.keys(groupedComments).length ? Object.entries(groupedComments).map(([file, items]) => (
           <section className="comment-file-group" key={file}>
             {full && <header><strong>{file}</strong><span>{items.length} comentário(s)</span></header>}
-            {items.map((comment) => <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} showThread={full} />)}
+            {items.map((comment) => <CommentItem key={comment.id} session={session} comment={comment} currentUser={currentUser} t={t} showThread={full} />)}
             </section>
             )) : <p className="empty-state">Nenhum comentário encontrado para os filtros atuais.</p>}
       </div>
@@ -756,7 +771,7 @@ function calculateCommentImpact(comments = []) {
 }
 
 
-function ValidationFindingsPanel({ session, git, currentUser }) {
+function ValidationFindingsPanel({ session, git, currentUser, t }) {
   const [rule, setRule] = useState('DIP');
   const [severity, setSeverity] = useState('HIGH');
   const [description, setDescription] = useState('Dependência concreta detectada na camada de aplicação.');
@@ -805,19 +820,19 @@ function ValidationFindingsPanel({ session, git, currentUser }) {
         <input type="number" min="1" value={line} onChange={(event) => setLine(event.target.value)} />
         <input value={description} onChange={(event) => setDescription(event.target.value)} />
         <Tooltip label="Criar finding de validação">
-          <button disabled={!session || !description.trim()} onClick={createFinding}><ListChecks size={16} /> Criar</button>
+          <button disabled={!session || !description.trim()} onClick={createFinding}><ListChecks size={16} /> {t('common.create')}</button>
         </Tooltip>
       </div>
       <div className="findings-list">
         {session?.findings?.length ? session.findings.map((finding) => (
-          <FindingItem key={finding.id} session={session} finding={finding} currentUser={state?.currentUser} />
+          <FindingItem key={finding.id} session={session} finding={finding} currentUser={currentUser} t={t} />
         )) : <p className="empty-state">Nenhuma validação registrada nesta sessão.</p>}
       </div>
     </section>
   );
 }
 
-function ArchitectureRulesPanel({ session }) {
+function ArchitectureRulesPanel({ session, t }) {
   const rules = [
     ['SOLID', 'SRP, OCP, LSP, ISP, DIP'],
     ['Clean Architecture', 'Dependência incorreta, camadas, circularidade e acoplamento'],
@@ -881,7 +896,7 @@ function IntelligencePanel({ intelligence }) {
   );
 }
 
-function CollaborationPanel({ session, currentUser }) {
+function CollaborationPanel({ session, currentUser, t }) {
   const [message, setMessage] = useState('Pode validar este módulo @dev?');
   const [mention, setMention] = useState(session?.author ?? 'dev');
   const [threadTarget, setThreadTarget] = useState(session?.comments?.[0]?.threadId ?? 'review-geral');
@@ -891,12 +906,12 @@ function CollaborationPanel({ session, currentUser }) {
   const findings = session?.findings ?? [];
   const messages = session?.collaborationMessages ?? [];
   const notifications = session?.notifications ?? [];
-  const participants = buildCollaborationParticipants(session);
-  const pendingByPerson = buildPendingByPerson(session);
+  const participants = buildCollaborationParticipants(session, t);
+  const pendingByPerson = buildPendingByPerson(session, t);
   const waitingDev = comments.filter((comment) => ['OPEN', 'NEEDS_CHANGES'].includes(comment.status ?? 'NEEDS_CHANGES')).length + findings.filter((finding) => ['NEEDS_CHANGES', 'REOPENED'].includes(finding.status ?? 'NEEDS_CHANGES')).length;
   const waitingReviewer = comments.filter((comment) => comment.status === 'RESOLVED').length + findings.filter((finding) => finding.status === 'FIXED').length;
   const blocked = Boolean(session?.mergeDecision?.blocked) || comments.some((comment) => comment.severity === 'CRITICAL' && !['RESOLVED', 'APPROVED'].includes(comment.status ?? ''));
-  const workflowState = blocked ? 'BLOQUEADO' : waitingDev > 0 ? 'AGUARDANDO DEV' : waitingReviewer > 0 ? 'AGUARDANDO REVIEWER' : 'PRONTO PARA APROVAÇÃO';
+  const workflowState = blocked ? t('collaboration.workflowState.blocked') : waitingDev > 0 ? t('collaboration.workflowState.waitingDev') : waitingReviewer > 0 ? t('collaboration.workflowState.waitingReviewer') : t('collaboration.workflowState.ready');
   const threadOptions = Array.from(new Set(['review-geral', ...comments.map((comment) => comment.threadId || `${comment.file}:${comment.line}`), ...messages.map((item) => item.threadId)])).filter(Boolean);
   const selectedThreadMessages = messages.filter((item) => (item.threadId || item.id) === threadTarget);
   const assigneeOptions = Array.from(new Set([session?.author, session?.reviewer, 'dev', 'reviewer', ...comments.map((comment) => comment.author)])).filter(Boolean);
@@ -917,23 +932,23 @@ function CollaborationPanel({ session, currentUser }) {
     <section className="sessions-panel collaboration-workspace">
       <div className="section-title">
         <div>
-          <h2>Colaboração</h2>
-          <p className="muted">Central operacional do fluxo humano: papéis, responsáveis, pendências, threads, menções, aprovações e bloqueios.</p>
+          <h2>{t('collaboration.title')}</h2>
+          <p className="muted">{t('collaboration.subtitle')}</p>
         </div>
         <span className={blocked ? 'merge blocked' : 'merge'}>{workflowState}</span>
       </div>
 
       <section className="collaboration-status-grid">
-        <SummaryCard title="Aguardando dev" value={String(waitingDev)} label="correções pendentes" color={waitingDev ? 'yellow' : 'green'} />
-        <SummaryCard title="Aguardando reviewer" value={String(waitingReviewer)} label="validações pendentes" color={waitingReviewer ? 'blue' : 'green'} />
-        <SummaryCard title="Bloqueios" value={String(session?.mergeDecision?.reasons?.length ?? (blocked ? 1 : 0))} label="impedem merge" color={blocked ? 'red' : 'green'} />
-        <SummaryCard title="Notificações" value={String(notifications.filter((item) => !item.read).length)} label="menções não lidas" color="blue" />
+        <SummaryCard title={t('collaboration.summary.waitingDev')} value={String(waitingDev)} label={t('collaboration.summary.pendingCorrections')} color={waitingDev ? 'yellow' : 'green'} />
+        <SummaryCard title={t('collaboration.summary.waitingReviewer')} value={String(waitingReviewer)} label={t('collaboration.summary.pendingValidations')} color={waitingReviewer ? 'blue' : 'green'} />
+        <SummaryCard title={t('collaboration.summary.blocks')} value={String(session?.mergeDecision?.reasons?.length ?? (blocked ? 1 : 0))} label={t('collaboration.summary.preventMerge')} color={blocked ? 'red' : 'green'} />
+        <SummaryCard title={t('collaboration.summary.notifications')} value={String(notifications.filter((item) => !item.read).length)} label={t('collaboration.summary.unreadMentions')} color="blue" />
       </section>
 
       <section className="collaboration-layout">
         <aside className="collaboration-side">
           <section className="sessions-panel nested-panel">
-            <div className="section-title"><h2>Papéis da revisão</h2></div>
+            <div className="section-title"><h2>{t('collaboration.roles')}</h2></div>
             <div className="participant-list">
               {participants.map((person) => (
                 <article key={`${person.role}-${person.name}`} className="participant-card">
@@ -946,7 +961,7 @@ function CollaborationPanel({ session, currentUser }) {
           </section>
 
           <section className="sessions-panel nested-panel">
-            <div className="section-title"><h2>Pendências por pessoa</h2></div>
+            <div className="section-title"><h2>{t('collaboration.pendingByPerson')}</h2></div>
             <div className="ownership-list">
               {pendingByPerson.length ? pendingByPerson.map((item) => (
                 <article key={item.name} className="ownership-card">
@@ -968,17 +983,17 @@ function CollaborationPanel({ session, currentUser }) {
               {assigneeOptions.map((person) => <option key={person} value={person}>{person}</option>)}
             </select>
             <input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Mensagem com @menção" />
-            <button disabled={!session || !message.trim()} onClick={sendMessage}><MessageSquare size={16} /> Enviar</button>
+            <button disabled={!session || !message.trim()} onClick={sendMessage}><MessageSquare size={16} /> {t('common.save')}</button>
           </div>
 
           <div className="workflow-actions collaboration-actions">
-            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>Aprovar arquivo</button>
-            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>Aprovar módulo</button>
-            <button disabled={!session || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>Atualizar bloqueio</button>
+            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'file', target: firstFile } })}>{t('collaboration.approveFile')}</button>
+            <button disabled={!session || !firstFile || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'approvePartial', payload: { id: session.id, scope: 'module', target: moduleName } })}>{t('collaboration.approveModule')}</button>
+            <button disabled={!session || !canApprove} onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session.id } })}>{t('collaboration.updateBlock')}</button>
           </div>
 
           <section className="sessions-panel nested-panel">
-            <div className="section-title"><h2>Threads e respostas</h2><Badge>{threadTarget}</Badge></div>
+            <div className="section-title"><h2>{t('collaboration.threads')}</h2><Badge>{threadTarget}</Badge></div>
             <div className="thread-board">
               {comments.filter((comment) => (comment.threadId || `${comment.file}:${comment.line}`) === threadTarget).map((comment) => (
                 <article key={comment.id} className="thread-message reviewer-message">
@@ -1008,19 +1023,19 @@ function CollaborationPanel({ session, currentUser }) {
   );
 }
 
-function buildCollaborationParticipants(session) {
+function buildCollaborationParticipants(session, t) {
   if (!session) return [];
   const reviewer = session.reviewer || 'reviewer';
   const author = session.author || 'dev';
   const mentioned = Array.from(new Set((session.notifications ?? []).map((item) => item.recipient))).filter((name) => ![reviewer, author].includes(name));
   return [
-    { name: reviewer, role: 'Reviewer', state: session.mergeDecision?.blocked ? 'validando bloqueios' : 'apto a aprovar' },
-    { name: author, role: 'Developer', state: (session.comments ?? []).some((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? '')) ? 'corrigir pendências' : 'sem pendências' },
+    { name: reviewer, role: t('common.reviewer'), state: session.mergeDecision?.blocked ? 'validando bloqueios' : 'apto a aprovar' },
+    { name: author, role: t('common.developer'), state: (session.comments ?? []).some((comment) => !['RESOLVED', 'APPROVED'].includes(comment.status ?? '')) ? 'corrigir pendências' : 'sem pendências' },
     ...mentioned.map((name) => ({ name, role: 'Mencionado', state: 'aguardando resposta' }))
   ];
 }
 
-function buildPendingByPerson(session) {
+function buildPendingByPerson(session, t) {
   if (!session) return [];
   const rows = [];
   const author = session.author || 'dev';
@@ -1029,14 +1044,14 @@ function buildPendingByPerson(session) {
     + (session.findings ?? []).filter((finding) => ['NEEDS_CHANGES', 'REOPENED'].includes(finding.status ?? 'NEEDS_CHANGES')).length;
   const reviewerPending = (session.comments ?? []).filter((comment) => comment.status === 'RESOLVED').length
     + (session.findings ?? []).filter((finding) => finding.status === 'FIXED').length;
-  if (devPending) rows.push({ name: author, role: 'Developer', count: devPending, description: 'itens aguardando correção ou resposta' });
-  if (reviewerPending) rows.push({ name: reviewer, role: 'Reviewer', count: reviewerPending, description: 'itens aguardando revalidação' });
+  if (devPending) rows.push({ name: author, role: t('common.developer'), count: devPending, description: 'itens aguardando correção ou resposta' });
+  if (reviewerPending) rows.push({ name: reviewer, role: t('common.reviewer'), count: reviewerPending, description: 'itens aguardando revalidação' });
   (session.notifications ?? []).filter((item) => !item.read).forEach((item) => rows.push({ name: item.recipient, role: 'Mencionado', count: 1, description: item.message }));
   return rows;
 }
 
 
-function VSCodeContextPanel({ vscodeContext }) {
+function VSCodeContextPanel({ vscodeContext, t }) {
   const problems = vscodeContext?.problems ?? [];
   const tests = vscodeContext?.tests ?? { available: false, lastRunStatus: 'NOT_RUN' };
 
@@ -1083,7 +1098,7 @@ function isAuthor(session, user) {
   return session?.author === user || user === 'admin';
 }
 
-function FindingItem({ session, finding, currentUser }) {
+function FindingItem({ session, finding, currentUser, t }) {
   const correctionCommit = session.commits?.[0] ?? 'HEAD';
   const canApprove = isReviewer(session, currentUser);
   const canCorrect = isAuthor(session, currentUser);
@@ -1133,7 +1148,7 @@ function FindingItem({ session, finding, currentUser }) {
   );
 }
 
-function CommentItem({ session, comment, currentUser, showThread = false }) {
+function CommentItem({ session, comment, currentUser, t, showThread = false }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(comment.body);
   const history = comment.history ?? [];
@@ -1166,7 +1181,7 @@ function CommentItem({ session, comment, currentUser, showThread = false }) {
           <button onClick={() => {
             vscodeApi?.postMessage({ type: 'editReviewComment', payload: { id: session.id, commentId: comment.id, body } });
             setEditing(false);
-          }}>Salvar</button>
+          }}>{t('common.save')}</button>
         </div>
       ) : <p>{comment.body}</p>}
       <div className="comment-meta-row">
@@ -1231,7 +1246,7 @@ function SkeletonPanel() {
   );
 }
 
-function FindingsTable({ changedFiles = [] }) {
+function FindingsTable({ changedFiles = [], t }) {
   const rows = changedFiles.length ? changedFiles.slice(0, 5).map((file, index) => [
     index === 0 ? 'Sugestão' : 'Conforme',
     'Git diff',
@@ -1299,30 +1314,30 @@ function InsightCard({ title, severity, text, file = 'src/extension.ts', line = 
   );
 }
 
-function Timeline({ session }) {
+function Timeline({ session, t }) {
   const steps = session?.history?.length ? session.history.map((entry) => [
-    entry.type === 'SESSION_CREATED' ? 'Sessão criada' : entry.type === 'STATUS_CHANGED' ? 'Status atualizado' : 'Git atualizado',
+    entry.type === 'SESSION_CREATED' ? t('common.status.open') : entry.type === 'STATUS_CHANGED' ? t('dashboard.summary.status') : 'Git',
     entry.message
   ]) : [
-    ['PR criada', 'feature/auth-refactor'],
-    ['Review executada', '25 violações encontradas'],
-    ['Comentários gerados', '3 críticos, 7 avisos'],
-    ['Aguardando correção', 'Responsável: Developer'],
-    ['Revalidação pendente', 'Após novos commits']
+    ['PR created', 'feature/auth-refactor'],
+    ['Review executed', '25 violations found'],
+    ['Comments generated', '3 critical, 7 warnings'],
+    [t('collaboration.workflowState.waitingDev'), `Responsible: ${t('common.developer')}`],
+    ['Revalidation pending', 'After new commits']
   ];
 
   return <div className="timeline">{steps.map(([title, text], index) => <div key={`${title}-${index}`}><b>{title}</b><p>{text}</p></div>)}</div>;
 }
 
-function ReviewSessionsPanel({ sessions = [], currentSession, currentUser }) {
+function ReviewSessionsPanel({ sessions = [], currentSession, currentUser, t }) {
   return (
     <section className="sessions-panel">
       <div className="section-title">
         <div>
-          <h2>Sessões de review</h2>
-          <p className="muted">Histórico local das sessões registradas neste workspace.</p>
+          <h2>{t('history.title')}</h2>
+          <p className="muted">{t('history.subtitle')}</p>
         </div>
-        {currentSession && <StatusControls session={currentSession} currentUser={currentUser} />}
+        {currentSession && <StatusControls session={currentSession} currentUser={currentUser} t={t} />}
       </div>
       <div className="sessions-list">
         {sessions.length ? sessions.map((session) => (
@@ -1338,13 +1353,13 @@ function ReviewSessionsPanel({ sessions = [], currentSession, currentUser }) {
             </span>
             <b>{session.status}</b>
           </button>
-        )) : <p className="empty-state">Nenhuma sessão criada ainda.</p>}
+        )) : <p className="empty-state">{t('common.noData')}</p>}
       </div>
     </section>
   );
 }
 
-function StatusControls({ session, currentUser }) {
+function StatusControls({ session, currentUser, t }) {
   const statuses = ['OPEN', 'IN_REVIEW', 'NEEDS_CHANGES', 'FIXED', 'APPROVED', 'REOPENED'];
   const canApprove = isReviewer(session, currentUser);
 
@@ -1365,10 +1380,11 @@ function StatusControls({ session, currentUser }) {
 }
 
 function Rightbar({ metrics, state, onSetView, onStartReview, onToggle }) {
+  const t = getT(state);
   return (
     <aside className="rightbar">
       <header>
-        <span>Revisão atual</span>
+        <span>{t('dashboard.timeline')}</span>
         <div>
           <button className="sidebar-toggle inline" title="Ocultar painel lateral direito" onClick={onToggle}><PanelRightClose size={16} /></button>
           <RefreshCw size={17} />
@@ -1377,15 +1393,15 @@ function Rightbar({ metrics, state, onSetView, onStartReview, onToggle }) {
       </header>
 
       <section className="quality-card">
-        <h4>Score de Qualidade</h4>
+        <h4>{t('dashboard.hero.scoreLabel')}</h4>
         <Ring score={metrics?.qualityScore ?? 100} />
-        <strong>{qualityLabel(metrics?.qualityScore ?? 100)}</strong>
+        <strong>{qualityLabel(metrics?.qualityScore ?? 100, t)}</strong>
       </section>
 
       <section className="kpi-stack">
-        <Metric title="Comentários" value={String(metrics?.commentsCount ?? 0)} color="red" />
-        <Metric title="Problems" value={String(state?.vscode?.problems?.length ?? 0)} color="yellow" />
-        <Metric title="Abertos" value={String(metrics?.openCommentsCount ?? 0)} color="green" bar />
+        <Metric title={t('dashboard.summary.comments')} value={String(metrics?.commentsCount ?? 0)} color="red" />
+        <Metric title={t('diagnostics.summary.problems')} value={String(state?.vscode?.problems?.length ?? 0)} color="yellow" />
+        <Metric title={t('dashboard.summary.open')} value={String(metrics?.openCommentsCount ?? 0)} color="green" bar />
       </section>
 
       <section>
@@ -1396,11 +1412,11 @@ function Rightbar({ metrics, state, onSetView, onStartReview, onToggle }) {
       </section>
 
       <section>
-        <h3>Ações rápidas</h3>
+        <h3>{t('dashboard.nextActions')}</h3>
         <div className="actions">
-          <button onClick={onStartReview}><Play size={18} />Executar</button>
+          <button onClick={onStartReview}><Play size={18} />{t('common.update')}</button>
           <button onClick={() => vscodeApi?.postMessage({ type: 'runArchitectureValidation', payload: { id: state?.currentSession?.id } })} disabled={!state?.currentSession}><Wrench size={18} />Corrigir</button>
-          <button onClick={() => vscodeApi?.postMessage({ type: 'exportReviewReport' })}><FileDown size={18} />Relatório</button>
+          <button onClick={() => vscodeApi?.postMessage({ type: 'exportReviewReport' })}><FileDown size={18} />{t('dashboard.exportReport')}</button>
           <button onClick={() => onSetView('comments')}><MessageSquare size={18} />Comentar</button>
         </div>
       </section>
@@ -1448,6 +1464,7 @@ function TelemetryCenter({ state }) {
   const rules = metrics.ruleFrequency ?? [];
   const reviewers = metrics.reviewerCount ?? [];
   const developers = metrics.developerCount ?? [];
+  const t = getT(state);
 
   return (
     <main className="center-panel simple">
@@ -1455,8 +1472,8 @@ function TelemetryCenter({ state }) {
         <div><span className="eyebrow">Telemetria</span><h1>Dashboards de qualidade</h1><p>Reincidências, regras mais violadas, tempo médio de correção e evolução por PR.</p></div>
       </header>
       <section className="summary-grid" data-tour="quality-summary">
-        <SummaryCard title="Score" value={`${metrics.qualityScore ?? 100}/100`} label={qualityLabel(metrics.qualityScore ?? 100)} color="green" />
-        <SummaryCard title="Findings" value={String(metrics.findingsCount ?? 0)} label={`${metrics.criticalCount ?? 0} críticos`} color="red" />
+        <SummaryCard title={t('dashboard.summary.score')} value={`${metrics.qualityScore ?? 100}/100`} label={qualityLabel(metrics.qualityScore ?? 100, t)} color="green" />
+        <SummaryCard title={t('diagnostics.summary.findings')} value={String(metrics.findingsCount ?? 0)} label={`${metrics.criticalCount ?? 0} críticos`} color="red" />
         <SummaryCard title="Tempo médio" value={`${metrics.averageCorrectionHours ?? 0}h`} label="correção" color="yellow" />
         <SummaryCard title="Eventos" value={String(metrics.eventsCount ?? 0)} label="telemetria local" color="blue" />
       </section>
@@ -1495,6 +1512,7 @@ function IntelligenceCenter({ state }) {
   const correlations = intelligence.correlations ?? [];
   const riskAnalysis = intelligence.riskAnalysis ?? [];
   const topRisk = Math.max(0, ...hotspots.map((item) => item.riskScore ?? 0), ...moduleHotspots.map((item) => item.riskScore ?? 0));
+  const t = getT(state);
 
   return (
     <main className="center-panel simple intelligence-page">
@@ -1531,12 +1549,13 @@ function IntelligenceCenter({ state }) {
 }
 
 function CollaborationCenter({ state }) {
+  const t = getT(state);
   return (
     <main className="center-panel simple">
       <header className="center-header">
-        <div><span className="eyebrow">Colaboração</span><h1>Fluxo reviewer/developer</h1><p>Comunicação, aprovações parciais e bloqueio de merge.</p></div>
+        <div><span className="eyebrow">{t('collaboration.title')}</span><h1>{t('collaboration.title')}</h1><p>{t('collaboration.subtitle')}</p></div>
       </header>
-      <CollaborationPanel session={state?.currentSession} currentUser={state?.currentUser} />
+      <CollaborationPanel session={state?.currentSession} currentUser={state?.currentUser} t={t} />
     </main>
   );
 }
@@ -1648,6 +1667,7 @@ function TelemetryPanel({ title, items = [], empty }) {
 }
 function HistoryCenter({ state }) {
   const sessions = state?.sessions ?? [];
+  const t = getT(state);
   return (
     <main className="center-panel simple">
       <header className="center-header">
@@ -1661,11 +1681,11 @@ function HistoryCenter({ state }) {
         <span>{sessions.length} sessões registradas</span>
       </section>
       <section className="history-layout">
-        <ReviewSessionsPanel sessions={sessions} currentSession={state?.currentSession} currentUser={state?.currentUser} />
+        <ReviewSessionsPanel sessions={sessions} currentSession={state?.currentSession} currentUser={state?.currentUser} t={t} />
         <section className="review-workspace single history-detail">
           <div className="workspace-main">
             <h2>Timeline da sessão atual</h2>
-            <Timeline session={state?.currentSession} />
+            <Timeline session={state?.currentSession} t={t} />
           </div>
         </section>
       </section>
@@ -1674,6 +1694,7 @@ function HistoryCenter({ state }) {
 }
 function CommentsCenter({ state }) {
   const session = state?.currentSession;
+  const t = getT(state);
   return (
     <main className="center-panel simple comments-only">
       <header className="center-header">
@@ -1687,7 +1708,7 @@ function CommentsCenter({ state }) {
           <button disabled={!session} className="primary" onClick={() => vscodeApi?.postMessage({ type: 'refreshMergeDecision', payload: { id: session?.id } })}><RefreshCw size={16} /> Recalcular score/status</button>
         </div>
       </header>
-      <CommentsPanel session={session} currentUser={state?.currentUser} full />
+      <CommentsPanel session={session} currentUser={state?.currentUser} t={t} full />
     </main>
   );
 }
@@ -1695,33 +1716,34 @@ function CommentsCenter({ state }) {
 function SettingsCenter({ state }) {
   const performance = state?.performance ?? {};
   const integrations = state?.integrations ?? [];
+  const t = getT(state);
 
   return (
     <main className="center-panel simple">
       <header className="center-header">
         <div>
           <span className="eyebrow">Persistência, performance e integrações</span>
-          <h1>Configurações operacionais</h1>
-          <p>Banco local, backup, sincronização remota, cache, lazy loading e adaptadores futuros.</p>
+          <h1>{t('settings.title')}</h1>
+          <p>{t('settings.subtitle')}</p>
         </div>
         <div className="header-actions" data-tour="persistence-actions">
-          <button data-tour="export-database" onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> Banco local</button>
+          <button data-tour="export-database" onClick={() => vscodeApi?.postMessage({ type: 'exportLocalDatabase' })}><FileDown size={16} /> {t('settings.actions.localDatabase')}</button>
           <button onClick={() => vscodeApi?.postMessage({ type: 'createBackup' })}><Shield size={16} /> Backup</button>
           <button disabled={!state?.currentSession} onClick={() => vscodeApi?.postMessage({ type: 'deleteReviewSession', payload: { id: state.currentSession.id } })}><XCircle size={16} /> Remover sessão</button>
           <button className="primary" onClick={() => vscodeApi?.postMessage({ type: 'syncRemote' })}><RefreshCw size={16} /> Sync remoto</button>
         </div>
       </header>
       <section className="summary-grid">
-        <SummaryCard title="Cache" value={performance.cacheEnabled ? 'Ativo' : 'Inativo'} label="TTL local" color="green" />
-        <SummaryCard title="Lazy loading" value={String(performance.lazySessionLimit ?? 0)} label="sessões por carga" color="blue" />
-        <SummaryCard title="Batch" value={String(performance.incrementalBatchSize ?? 0)} label="render incremental" color="yellow" />
-        <SummaryCard title="Async" value={performance.asyncProcessingEnabled ? 'Ativo' : 'Inativo'} label="processamento" color="green" />
+        <SummaryCard title={t('settings.summary.cache')} value={performance.cacheEnabled ? 'Ativo' : 'Inativo'} label="TTL local" color="green" />
+        <SummaryCard title={t('settings.summary.lazyLoading')} value={String(performance.lazySessionLimit ?? 0)} label="sessões por carga" color="blue" />
+        <SummaryCard title={t('settings.summary.batch')} value={String(performance.incrementalBatchSize ?? 0)} label="render incremental" color="yellow" />
+        <SummaryCard title={t('settings.summary.async')} value={performance.asyncProcessingEnabled ? 'Ativo' : 'Inativo'} label="processamento" color="green" />
       </section>
       <section className="sessions-panel">
         <div className="section-title">
           <div>
-            <h2>Integrações preparadas</h2>
-            <p className="muted">Adaptadores prontos para configuração sem acoplar credenciais ao núcleo da extensão.</p>
+            <h2>{t('settings.integrations.title')}</h2>
+            <p className="muted">{t('settings.integrations.subtitle')}</p>
           </div>
         </div>
         <div className="integration-grid">
@@ -1740,15 +1762,16 @@ function SettingsCenter({ state }) {
 
 function ConformitiesCenter({ state }) {
   const comments = state?.currentSession?.comments ?? [];
+  const t = getT(state);
   const resolved = comments.filter((comment) => ['RESOLVED', 'APPROVED'].includes(comment.status)).length;
   const total = comments.length || 1;
   const adherence = Math.round((resolved / total) * 100);
   const conformities = [
-    ['Comentários públicos', 'Comentários vinculados a arquivo, linha e commit.', comments.length ? 'Com evidência' : 'Aguardando comentários'],
-    ['Score rastreável', 'Pontuação derivada de severidade, status e Problems/Testes.', 'Ativo'],
-    ['Integração VS Code', 'Leitura de Problems, abertura de arquivo e diff.', 'Ativo'],
-    ['Fluxo reviewer/dev', 'Status da sessão orientado por comentários.', state?.currentSession?.status ?? 'OPEN'],
-    ['Histórico auditável', 'Sessões, eventos e alterações ficam registradas.', `${state?.sessions?.length ?? 0} sessões`]
+    ['Public Comments', 'Comments linked to file, line, and commit.', comments.length ? 'With evidence' : 'Waiting for comments'],
+    ['Traceable Score', 'Score derived from severity, status, and Problems/Tests.', 'Active'],
+    ['VS Code Integration', 'Reading Problems, opening file and diff.', 'Active'],
+    ['Reviewer/Dev Flow', 'Session status driven by comments.', state?.currentSession?.status ?? 'OPEN'],
+    ['Auditable History', 'Sessions, events, and changes are recorded.', `${state?.sessions?.length ?? 0} sessions`]
   ];
 
   return (
@@ -1756,7 +1779,7 @@ function ConformitiesCenter({ state }) {
       <header className="center-header">
         <div>
           <span className="eyebrow">Conformidades</span>
-          <h1>Boas práticas atendidas</h1>
+          <h1>Boas Práticas Atendidas</h1>
           <p>Esta tela mostra aderências e evidências positivas. Problemas, erros e violações ficam em Diagnósticos.</p>
         </div>
       </header>
@@ -2165,8 +2188,8 @@ function App() {
   );
 }
 
-function qualityLabel(score) {
-  if (score >= 85) return 'Muito bom';
+function qualityLabel(score, t) {
+  if (score >= 85) return t ? t('common.status.approved') : 'Muito bom';
   if (score >= 70) return 'Bom';
   if (score >= 50) return 'Atenção';
   return 'Crítico';

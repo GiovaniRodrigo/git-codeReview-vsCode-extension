@@ -268,7 +268,7 @@ export class ReviewPanel {
     }
 
     if (message.type === 'exportReviewReport') {
-      const state = await this.service.getDashboardState(vscode.env.machineId);
+      const state = await this.service.getDashboardState(vscode.env.machineId, vscode.env.language);
       const report = buildMarkdownReport(state);
       const document = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' });
       await vscode.window.showTextDocument(document, { preview: false });
