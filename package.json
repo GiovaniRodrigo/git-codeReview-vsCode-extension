@@ -1,14 +1,18 @@
 {
-  "name": "code-review-vscode-extension",
+  "name": "git-code-review",
   "displayName": "Code Review Design Extension",
   "description": "Professional VS Code extension for architectural code review, PR analysis, and engineering telemetry with Material Design 3.",
-  "version": "1.0.0",
-  "publisher": "giovani",
+  "version": "1.0.2",
+  "publisher": "CodeReviewExtension",
   "private": false,
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/GiovaniRodrigo/code-review-extension"
+  },
+  "homepage": "https://github.com/GiovaniRodrigo/code-review-extension#readme",
+  "bugs": {
+    "url": "https://github.com/GiovaniRodrigo/code-review-extension/issues"
   },
   "icon": "media/logo_128px.png",
   "keywords": [

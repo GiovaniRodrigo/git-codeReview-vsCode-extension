@@ -14,6 +14,7 @@ webview-ui/package-lock.json
 webview-ui/package.json
 webview-ui/vite.config.js
 esbuild.mjs
+gerar_versao_vscode.sh
 tsconfig.json
 .gitignore
 *.vsix

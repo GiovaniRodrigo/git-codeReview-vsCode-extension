@@ -2,6 +2,8 @@
 
 Professional VS Code extension for architectural code review, Pull Request analysis, and engineering telemetry with Material Design 3.
 
+![Dashboard Preview](./media/prints/dashboard.png)
+
 ## Features
 
 - **Architectural Analysis**: Detect SOLID, Clean Architecture, and DDD violations.
@@ -12,13 +14,14 @@ Professional VS Code extension for architectural code review, Pull Request analy
 - **Audit & Persistence**: Versioned local database with NDJSON audit logs.
 - **Onboarding**: Interactive guided tour for new users.
 
-## Usage
+![Diagnostics Preview](./media/prints/diagnostics.png)
 
-1. Open the **Code Review** icon in the Activity Bar.
-2. Use the **Dashboard** to see an executive overview of your project's quality.
-3. Start a **Review Session** to analyze current changes.
-4. Navigate through **Git Review** to comment on specific lines and commits.
-5. Export reports and audit logs for compliance.
+## Getting Started
+
+1. **Installation**: Install the extension from the VS Code Marketplace.
+2. **Open Sidebar**: Click on the **Code Review** icon in the Activity Bar (or use `Ctrl+Alt+R`).
+3. **Tutorial**: On first launch, follow the interactive tour to learn the basics.
+4. **Start a Review**: Use the "Iniciar Revisão" button to analyze your current branch or a specific PR.
 
 ## Commands
 
@@ -39,4 +42,4 @@ This extension follows **Clean Architecture** principles:
 
 ## License
 
-MIT © 2026 Code Review Team
+MIT © 2026 Giovani Rodrigo
